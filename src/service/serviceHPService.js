@@ -355,12 +355,11 @@ export const getAllServiceHP = async ({
   };
 };
 
-export const getDetailServiceHP = async (id) => {
-  const data = await prisma.serviceHP.findUnique({
+export const getDetailServiceHP = async (id, user) => {
+  const transaksi = await prisma.serviceHP.findUnique({
     where: { id },
     include: {
       Member: true,
-      User: true,
       Sparepart: {
         include: {
           Sparepart: true, // ambil detail nama & harga sparepart
@@ -369,9 +368,23 @@ export const getDetailServiceHP = async (id) => {
     },
   });
 
-  if (!data) {
+  if (!transaksi) {
     throw new Error("Service tidak ditemukan");
   }
+
+  const toko = await prisma.toko.findUnique({
+    where: {
+      id: user.toko_id,
+    },
+  });
+
+  return {
+    namaToko: toko.namaToko,
+    logoToko: toko.logoToko,
+    alamat: toko.alamat,
+    noTelp: toko.noTelp,
+    transaksi,
+  };
 
   return data;
 };

@@ -91,7 +91,7 @@ export const detailTransaksiVoucherDownline = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const data = await getDetailTransaksiVoucherDownline(id);
+    const data = await getDetailTransaksiVoucherDownline(id, req.user);
 
     res.status(200).json({
       success: true,

@@ -99,9 +99,6 @@ export const getAllToko = async (query) => {
       include: {
         User: true,
       },
-      //   orderBy: {
-      //     createdAt: "desc",
-      //   },
     });
   } catch (error) {
     console.log(error);

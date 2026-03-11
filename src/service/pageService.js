@@ -568,6 +568,8 @@ export const dashboardPageService2 = async (
             },
           },
           tanggal: true,
+          createdAt: true,
+
           keuntungan: true,
           status: true,
           items: {
@@ -595,6 +597,7 @@ export const dashboardPageService2 = async (
           keuntungan: true,
           id: true,
           tanggal: true,
+          createdAt: true,
           totalHarga: true,
           items: {
             select: {
@@ -620,6 +623,7 @@ export const dashboardPageService2 = async (
           keterangan: true,
           keuntungan: true,
           namaPelangan: true,
+          createdAt: true,
           noHP: true,
           biayaJasa: true,
           tanggal: true,
@@ -654,6 +658,7 @@ export const dashboardPageService2 = async (
           id: true,
           idMember: true,
           keuntungan: true,
+          createdAt: true,
           tanggal: true,
           totalHarga: true,
           items: {

@@ -7,12 +7,14 @@ const prisma = new PrismaClient();
 
 // CREATE
 export const createTransaksiAksesoris = async (
-  { items, nama, keuntungan, status = "selesai", idMember, penempatan, idUser },
+  { items, nama, keuntungan, status = "selesai", idMember },
   user
 ) => {
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw new Error("Item transaksi tidak boleh kosong");
   }
+
+  console.log("peler", idMember);
 
   const generateRandomCode = (length = 8) => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -63,6 +65,7 @@ export const createTransaksiAksesoris = async (
         },
         select: {
           id: true,
+          nama: true,
         },
       });
     }
@@ -70,12 +73,12 @@ export const createTransaksiAksesoris = async (
     const transaksi = await tx.transaksiAksesoris.create({
       data: {
         totalHarga,
-        namaPembeli: nama ? nama : namaRandom,
+        namaPembeli: memberId ? memberId.nama || nama : namaRandom,
         keuntungan,
 
-        ...(idMember && {
+        ...(memberId && {
           Member: {
-            connect: { id: idMember },
+            connect: { id: memberId.id },
           },
         }),
 
@@ -431,7 +434,7 @@ export const getLaporanBarangKeluar = async (
   };
 };
 
-export const getDetailTransaksiAksesoris = async (id) => {
+export const getDetailTransaksiAksesoris = async (id, user) => {
   const transaksi = await prisma.transaksiAksesoris.findUnique({
     where: { id },
     include: {
@@ -447,6 +450,20 @@ export const getDetailTransaksiAksesoris = async (id) => {
   if (!transaksi) {
     throw new Error("Transaksi tidak ditemukan");
   }
+
+  const toko = await prisma.toko.findUnique({
+    where: {
+      id: user.toko_id,
+    },
+  });
+
+  return {
+    namaToko: toko.namaToko,
+    logoToko: toko.logoToko,
+    alamat: toko.alamat,
+    noTelp: toko.noTelp,
+    transaksi,
+  };
 
   return transaksi;
 };

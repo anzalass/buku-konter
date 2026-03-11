@@ -532,23 +532,38 @@ export const getLaporanBarangKeluar = async ({
   };
 };
 
-export const getDetailTransaksiVoucherDownline = async (id) => {
-  const transaksi = await prisma.transaksiVoucherDownline.findUnique({
-    where: { id },
-    include: {
-      downline: true,
-      User: true,
-      items: {
-        include: {
-          Voucher: true,
+export const getDetailTransaksiVoucherDownline = async (id, user) => {
+  try {
+    const transaksi = await prisma.transaksiVoucherDownline.findUnique({
+      where: { id },
+      include: {
+        downline: true,
+        items: {
+          include: {
+            Voucher: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  if (!transaksi) {
-    throw new Error("Transaksi tidak ditemukan");
+    if (!transaksi) {
+      throw new Error("Transaksi tidak ditemukan");
+    }
+
+    const toko = await prisma.toko.findUnique({
+      where: {
+        id: user.toko_id,
+      },
+    });
+
+    return {
+      namaToko: toko.namaToko,
+      logoToko: toko.logoToko,
+      alamat: toko.alamat,
+      noTelp: toko.noTelp,
+      transaksi,
+    };
+  } catch (error) {
+    console.log(error);
   }
-
-  return transaksi;
 };

@@ -17,7 +17,7 @@ export const getAllUsersHandler = async (req, res) => {
       search,
       role,
       penempatan,
-      idToko: req.user.id_toko,
+      idToko: req.user.toko_id,
     });
     res.json(result);
   } catch (error) {
@@ -41,7 +41,15 @@ export const getUserByIdHandler = async (req, res) => {
 export const createUserHandler = async (req, res) => {
   try {
     const { nama, email, password, role, penempatan } = req.body;
-    const user = await createUser({ nama, email, password, role, penempatan });
+    const idToko = req.user.toko_id;
+    const user = await createUser({
+      nama,
+      email,
+      password,
+      role,
+      penempatan,
+      idToko,
+    });
     res.status(201).json(user);
   } catch (error) {
     res.status(400).json({ error: error.message });

@@ -50,6 +50,7 @@ export const getAllUsers = async ({
       select: {
         id: true,
         nama: true,
+        idToko: true,
         email: true,
         role: true,
         penempatan: true,
@@ -93,7 +94,7 @@ export const getUserById = async (id) => {
 
 // ✅ CREATE
 export const createUser = async (data) => {
-  const { nama, email, password, role, penempatan } = data;
+  const { nama, email, password, role, penempatan, idToko } = data;
 
   // Validasi wajib
   if (!nama || !email || !password || !role) {
@@ -113,6 +114,7 @@ export const createUser = async (data) => {
     data: {
       nama,
       email,
+      idToko,
       password: hashedPassword,
       role,
       penempatan: penempatan || null,
@@ -131,34 +133,43 @@ export const updateUser = async (id, data) => {
 
   // Cek email unik (kecuali milik user ini)
   const existing = await prisma.user.findFirst({
-    where: { email, NOT: { id } },
+    where: {
+      email,
+      NOT: { id },
+    },
   });
+
   if (existing) {
     throw new Error("Email sudah digunakan oleh user lain");
   }
 
-  // Hash password jika diubah
-  let updateData = { nama, email, role, penempatan: penempatan || null };
+  // Data update
+  const updateData = {
+    nama,
+    email,
+    role,
+    penempatan: penempatan || null,
+  };
+
+  // Hash password jika ada
   if (password) {
     updateData.password = await bcrypt.hash(password, SALT_ROUNDS);
   }
 
   const user = await prisma.user.update({
     where: { id },
-    updateData,
+    data: updateData, // ✅ harus pakai data
     select: {
       id: true,
       nama: true,
       email: true,
       role: true,
       penempatan: true,
-      password: false,
     },
   });
 
   return user;
 };
-
 // ✅ DELETE
 export const deleteUser = async (id) => {
   // Cek apakah user ada

@@ -58,6 +58,20 @@ export const createTransaksiSparepart = async (
         `${today.toISOString().split("T")[0]}T00:00:00Z`
       );
 
+      let memberId = null;
+
+      if (idMember) {
+        memberId = await trx.member.findUnique({
+          where: {
+            id: idMember,
+          },
+          select: {
+            id: true,
+            nama: true,
+          },
+        });
+      }
+
       // 🔥 Create transaksi + nested items
       const transaksi = await trx.transaksiSparepat.create({
         data: {
@@ -65,12 +79,12 @@ export const createTransaksiSparepart = async (
             connect: { id: user.toko_id },
           },
           totalHarga: totalHarga,
-          namaPembeli: nama ? nama : namaRandom,
+          namaPembeli: memberId ? memberId.nama || nama : namaRandom,
           keuntungan: keuntungan,
           tanggal: new Date(),
-          ...(idMember && {
+          ...(memberId && {
             Member: {
-              connect: { id: idMember },
+              connect: { id: memberId.id },
             },
           }),
           items: {
@@ -431,7 +445,7 @@ export const getLaporanBarangKeluar = async ({
   };
 };
 
-export const getDetailTransaksiSparepart = async (id) => {
+export const getDetailTransaksiSparepart = async (id, user) => {
   const transaksi = await prisma.transaksiSparepat.findUnique({
     where: { id },
     include: {
@@ -447,6 +461,17 @@ export const getDetailTransaksiSparepart = async (id) => {
   if (!transaksi) {
     throw new Error("Transaksi tidak ditemukan");
   }
+  const toko = await prisma.toko.findUnique({
+    where: {
+      id: user.toko_id,
+    },
+  });
 
-  return transaksi;
+  return {
+    namaToko: toko.namaToko,
+    logoToko: toko.logoToko,
+    alamat: toko.alamat,
+    noTelp: toko.noTelp,
+    transaksi,
+  };
 };

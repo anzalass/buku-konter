@@ -33,7 +33,7 @@ export const detailTransaksiAksesoris = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const data = await getDetailTransaksiAksesoris(id);
+    const data = await getDetailTransaksiAksesoris(id, req.user);
 
     res.status(200).json({
       success: true,

@@ -112,7 +112,7 @@ export const getAllServiceHPHandler = async (req, res) => {
 export const getDetailService = async (req, res) => {
   try {
     const { id } = req.params;
-    const data = await getDetailServiceHP(id);
+    const data = await getDetailServiceHP(id, req.user);
 
     res.json({ success: true, data });
   } catch (err) {

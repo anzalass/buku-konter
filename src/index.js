@@ -46,6 +46,7 @@ import memberRoutes from "./routes/memberRoutes.js";
 import voucherHarian from "./routes/jualanVoucherRoutes.js";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
 import logRoutes from "./routes/logRoutes.js";
+import tokoRoutes from "./routes/tokoRoutes.js";
 
 app.use("/api/v1", authRoutes);
 app.use("/api/v1", aksesorisRoutes);
@@ -65,6 +66,7 @@ app.use("/api/v1", jualanHarian);
 app.use("/api/v1", memberRoutes);
 app.use("/api/v1", voucherHarian);
 app.use("/api/v1", logRoutes);
+app.use("/api/v1", tokoRoutes);
 
 app.use(errorHandler);
 
