@@ -40,11 +40,27 @@ model Toko {
     Log Log[]
     JualanHarian JualanHarian[]
     KejadianTakTerduga KejadianTakTerduga[]
+    Keuntungan Keuntungan[]
+    DataMember DataMember[]
     isActive Boolean @default(true)   // ✅ TAMBAHAN
     createdAt DateTime? @default(now())
     updatedAt DateTime? @updatedAt
 
 }
+
+model Keuntungan {
+  id                     String   @id @default(uuid())
+  idToko                 String
+  createdAt                DateTime @default(now())
+  keuntunganTransaksi    BigInt   // ✅ Bukan String!
+  keuntunganVoucherHarian BigInt
+  keuntunganAcc          BigInt
+  keuntunganSparepart    BigInt
+  keuntunganService      BigInt
+  keuntunganGrosirVoucher BigInt
+  Toko                   Toko     @relation(fields: [idToko], references: [id])
+}
+
 
 model User {
     id String @id @default(uuid())
@@ -72,10 +88,22 @@ model Member {
     TransaksiAksesoris TransaksiAksesoris[]
     TransaksiSparepart TransaksiSparepat[]
     ServiceHP ServiceHP[]
-        VoucherHarian TransaksiVoucherHarian[]
+    VoucherHarian TransaksiVoucherHarian[]
+    DataMember DataMember[]
 
     idToko String
     Toko          Toko @relation(fields: [idToko], references: [id])
+}
+
+model DataMember {
+      id String @id @default(uuid())
+      idToko String
+      nama String
+      nomor String
+      idMember String
+      Member        Member @relation(fields: [idMember], references: [id])
+      Toko          Toko @relation(fields: [idToko], references: [id])
+
 }
 
 model Downline {

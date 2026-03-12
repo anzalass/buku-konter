@@ -23,55 +23,6 @@ const parseSort = (sortField, sortOrder = "asc") => {
   return { field: sortField, direction };
 };
 
-// CREATE
-export const createVoucher = async (data, user) => {
-  const {
-    nama,
-    brand,
-    stok,
-    hargaPokok,
-    hargaJual,
-    hargaEceran,
-    tanggal,
-    penempatan,
-  } = data;
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      const now = new Date();
-
-      await tx.voucher.create({
-        data: {
-          // 👈 tambahkan "data:"
-          nama,
-          penempatan,
-          brand,
-          idToko: user.toko_id,
-          stok: parseInt(stok) || 0,
-          hargaPokok: hargaPokok ? parseInt(hargaPokok) : null,
-          hargaJual: hargaJual ? parseInt(hargaJual) : null,
-          hargaEceran: hargaEceran ? parseInt(hargaEceran) : null,
-          createdAt: new Date(`${tanggal}T00:00:00Z`),
-          updatedAt: new Date(`${tanggal}T00:00:00Z`),
-        },
-      });
-    });
-
-    await createLog({
-      kategori: "Voucher",
-      keterangan: `${user.nama} Menambahkan Voucher Baru`,
-      nama: user.nama,
-      idToko: user.toko_id,
-    });
-
-    return { message: "Voucher berhasil dibuat" };
-  } catch (error) {
-    console.error("Error createVoucher:", error);
-    const errorMessage = prismaErrorHandler(error);
-    throw new Error(errorMessage);
-  }
-};
-
 // GET ALL with pagination, search, sort
 // services/voucherService.js
 export const getVouchers = async (
@@ -250,7 +201,62 @@ export const getVoucherById = async (id) => {
   }
 };
 
-// UPDATE
+export const createVoucher = async (data, user) => {
+  try {
+    const {
+      nama,
+      brand,
+      stok,
+      hargaPokok,
+      hargaJual,
+      hargaEceran,
+      tanggal,
+      penempatan,
+    } = data;
+
+    if (!nama || !brand || !tanggal) {
+      throw new Error("Nama, brand, dan tanggal wajib diisi");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const voucher = await tx.voucher.create({
+        data: {
+          nama,
+          penempatan,
+          brand,
+          idToko: user.toko_id,
+          stok: parseInt(stok) || 0,
+          hargaPokok: hargaPokok ? parseInt(hargaPokok) : null,
+          hargaJual: hargaJual ? parseInt(hargaJual) : null,
+          hargaEceran: hargaEceran ? parseInt(hargaEceran) : null,
+          createdAt: new Date(`${tanggal}T00:00:00Z`),
+          updatedAt: new Date(`${tanggal}T00:00:00Z`),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Voucher",
+          keterangan: `${user.nama} menambahkan voucher ${nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return {
+        message: "Voucher berhasil dibuat",
+        data: voucher,
+      };
+    });
+  } catch (error) {
+    console.error("Error createVoucher:", error);
+
+    const errorMessage = prismaErrorHandler(error);
+    throw new Error(errorMessage);
+  }
+};
+
 export const updateVoucher = async (id, data, user) => {
   try {
     const {
@@ -263,67 +269,80 @@ export const updateVoucher = async (id, data, user) => {
       penempatan,
     } = data;
 
-    await prisma.$transaction(async (tx) => {
-      await tx.voucher.update({
+    return await prisma.$transaction(async (tx) => {
+      const voucher = await tx.voucher.update({
         where: { id },
         data: {
           nama,
           penempatan,
           brand,
-          stok: stok ? parseInt(stok) : undefined,
-          hargaPokok: hargaPokok ? parseInt(hargaPokok) : undefined,
-          hargaJual: hargaJual ? parseInt(hargaJual) : undefined,
-          hargaEceran: hargaEceran ? parseInt(hargaEceran) : null,
+          stok: stok !== undefined ? parseInt(stok) : undefined,
+          hargaPokok:
+            hargaPokok !== undefined ? parseInt(hargaPokok) : undefined,
+          hargaJual: hargaJual !== undefined ? parseInt(hargaJual) : undefined,
+          hargaEceran: hargaEceran !== undefined ? parseInt(hargaEceran) : null,
         },
       });
-    });
 
-    await createLog({
-      kategori: "Voucher",
-      keterangan: `${user.nama} Mengupdate Voucher menjadi ${nama}  `,
-      nama: user.nama,
-      idToko: user.toko_id,
-    });
+      await createLog(
+        {
+          kategori: "Voucher",
+          keterangan: `${user.nama} mengupdate voucher menjadi ${nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
 
-    return { message: "Voucher berhasil diupdate" };
+      return {
+        message: "Voucher berhasil diupdate",
+        data: voucher,
+      };
+    });
   } catch (error) {
     console.error("Error updateVoucher:", error);
+
     const errorMessage = prismaErrorHandler(error);
     throw new Error(errorMessage);
   }
 };
 
-// DELETE
 export const deleteVoucher = async (id, user) => {
   try {
-    let vd;
-    await prisma.$transaction(async (tx) => {
-      vd = await tx.voucher.update({
+    return await prisma.$transaction(async (tx) => {
+      const voucher = await tx.voucher.update({
         where: { id },
         data: {
           isActive: false,
         },
       });
-    });
 
-    await createLog({
-      kategori: "Aksesoris",
-      keterangan: `Menghapus Voucher ${vd.nama}  `,
-      nama: user.nama,
-      idToko: user.toko_id,
+      await createLog(
+        {
+          kategori: "Voucher",
+          keterangan: `${user.nama} menghapus voucher ${voucher.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return {
+        message: "Voucher berhasil dihapus",
+      };
     });
-    return { message: "Voucher berhasil dihapus" };
   } catch (error) {
     console.error("Error deleteVoucher:", error);
+
     const errorMessage = prismaErrorHandler(error);
     throw new Error(errorMessage);
   }
 };
-
 // UPDATE STOK (tambah / kurang)
 export const updateStokVoucher = async (id, { tipe, stok }, user) => {
   try {
     const qty = parseInt(stok);
+
     if (isNaN(qty) || qty <= 0) {
       throw new Error("Jumlah stok harus angka positif");
     }
@@ -333,49 +352,59 @@ export const updateStokVoucher = async (id, { tipe, stok }, user) => {
     }
 
     let updatedStok;
+
     await prisma.$transaction(async (tx) => {
-      // Ambil stok saat ini
       const voucher = await tx.voucher.findUnique({
         where: { id },
-        select: { stok: true, nama: true, brand: true },
+        select: {
+          stok: true,
+          nama: true,
+          brand: true,
+        },
       });
 
       if (!voucher) {
         throw new Error("Voucher tidak ditemukan");
       }
 
-      // Hitung stok baru
       if (tipe === "tambah") {
         updatedStok = voucher.stok + qty;
       } else {
         updatedStok = voucher.stok - qty;
+
         if (updatedStok < 0) {
           throw new Error("Stok tidak boleh minus");
         }
       }
 
-      // Update stok
       await tx.voucher.update({
         where: { id },
-        data: { stok: updatedStok },
+        data: {
+          stok: updatedStok,
+        },
       });
 
-      // Log aktivitas
-
-      await createLog({
-        kategori: "Voucher",
-        keterangan: ` Stok Voucher ${updatedStok.nama} telah di ${tipe} ${stok} pcs `,
-        nama: user.nama,
-        idToko: user.toko_id,
-      });
+      await createLog(
+        {
+          kategori: "Voucher",
+          keterangan: `${user.nama} ${
+            tipe === "tambah" ? "menambah" : "mengurangi"
+          } stok voucher ${voucher.brand} ${voucher.nama} sebanyak ${qty} pcs`,
+          nominal: qty,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
     });
 
     return {
-      message: `Stok berhasil di${tipe === "tambah" ? "tambah" : "kurang"}`,
+      message: `Stok berhasil ${tipe === "tambah" ? "ditambah" : "dikurangi"}`,
       stok: updatedStok,
     };
   } catch (error) {
     console.error("Error updateStokVoucher:", error);
+
     const errorMessage = prismaErrorHandler(error);
     throw new Error(errorMessage);
   }

@@ -47,6 +47,9 @@ import voucherHarian from "./routes/jualanVoucherRoutes.js";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
 import logRoutes from "./routes/logRoutes.js";
 import tokoRoutes from "./routes/tokoRoutes.js";
+import dataMemberRoutes from "./routes/dataMemberRoutes.js";
+
+import { startDailyKeuntunganCron } from "./service/keuntunganService.js";
 
 app.use("/api/v1", authRoutes);
 app.use("/api/v1", aksesorisRoutes);
@@ -67,8 +70,10 @@ app.use("/api/v1", memberRoutes);
 app.use("/api/v1", voucherHarian);
 app.use("/api/v1", logRoutes);
 app.use("/api/v1", tokoRoutes);
+app.use("/api/v1", dataMemberRoutes);
 
 app.use(errorHandler);
+startDailyKeuntunganCron();
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);

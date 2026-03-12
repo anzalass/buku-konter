@@ -5,129 +5,192 @@ import { createLog } from "./logService.js";
 
 const prisma = new PrismaClient();
 
-// CREATE
 export const createTransaksiSparepart = async (
   { items, nama, keuntungan, idMember },
   user
 ) => {
   try {
-    if (!items || !Array.isArray(items) || items.length === 0) {
+    if (!Array.isArray(items) || items.length === 0) {
       throw new Error("Item transaksi tidak boleh kosong");
     }
 
     const generateRandomCode = (length = 8) => {
       const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-      let result = "";
-      for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return result;
+      return Array.from(
+        { length },
+        () => chars[Math.floor(Math.random() * chars.length)]
+      ).join("");
     };
 
-    const namaRandom = generateRandomCode();
-
-    await prisma.$transaction(async (trx) => {
+    return await prisma.$transaction(async (tx) => {
       let totalHarga = 0;
 
-      // 🔍 Validasi & hitung total
+      const sparepartIds = items.map((i) => i.idSparepart);
+
+      const sparepartList = await tx.sparePart.findMany({
+        where: {
+          id: { in: sparepartIds },
+        },
+        select: {
+          id: true,
+          nama: true,
+          stok: true,
+          hargaJual: true,
+        },
+      });
+
+      const sparepartMap = Object.fromEntries(
+        sparepartList.map((s) => [s.id, s])
+      );
+
       for (const item of items) {
         const { idSparepart, quantity } = item;
 
         if (!idSparepart || !quantity || quantity <= 0) {
-          throw new Error("Item tidak valid: idSparepart dan quantity wajib");
+          throw new Error("Item tidak valid");
         }
 
-        const sparePart = await trx.sparePart.findUnique({
-          where: { id: idSparepart },
-          select: { id: true, nama: true, stok: true, hargaJual: true },
-        });
+        const sparepart = sparepartMap[idSparepart];
 
-        if (!sparePart) {
-          throw new Error(`Sparepart dengan ID ${idSparepart} tidak ditemukan`);
+        if (!sparepart) {
+          throw new Error("Sparepart tidak ditemukan");
         }
 
-        if (sparePart.stok < quantity) {
-          throw new Error(`Stok ${sparePart.nama} tidak mencukupi`);
+        if (sparepart.stok < quantity) {
+          throw new Error(`Stok ${sparepart.nama} tidak mencukupi`);
         }
 
-        totalHarga += sparePart.hargaJual * quantity;
+        totalHarga += sparepart.hargaJual * quantity;
       }
 
-      const today = new Date();
-      const tanggal = new Date(
-        `${today.toISOString().split("T")[0]}T00:00:00Z`
-      );
-
-      let memberId = null;
+      let member = null;
 
       if (idMember) {
-        memberId = await trx.member.findUnique({
-          where: {
-            id: idMember,
-          },
-          select: {
-            id: true,
-            nama: true,
-          },
+        member = await tx.member.findUnique({
+          where: { id: idMember },
+          select: { id: true, nama: true },
         });
       }
 
-      // 🔥 Create transaksi + nested items
-      const transaksi = await trx.transaksiSparepat.create({
+      const transaksi = await tx.transaksiSparepat.create({
         data: {
-          Toko: {
-            connect: { id: user.toko_id },
-          },
-          totalHarga: totalHarga,
-          namaPembeli: memberId ? memberId.nama || nama : namaRandom,
-          keuntungan: keuntungan,
+          totalHarga,
+          keuntungan,
+          namaPembeli: member?.nama || nama || generateRandomCode(),
           tanggal: new Date(),
-          ...(memberId && {
+          idToko: user.toko_id,
+
+          ...(member && {
             Member: {
-              connect: { id: memberId.id },
+              connect: { id: member.id },
             },
           }),
+
           items: {
             create: items.map((item) => ({
               quantity: item.quantity,
               tanggal: new Date(),
+              idToko: user.toko_id,
               Sparepart: {
                 connect: { id: item.idSparepart },
-              },
-              Toko: {
-                connect: { id: user.toko_id },
               },
             })),
           },
         },
       });
 
-      // 🔻 Kurangi stok
       for (const item of items) {
-        await trx.sparePart.update({
+        await tx.sparePart.update({
           where: { id: item.idSparepart },
           data: {
             stok: { decrement: item.quantity },
           },
         });
       }
-      await createLog({
-        kategori: "Transaksi Sparepart",
-        keterangan: `${user.nama} telah membuat Transaksi Sparepart`,
-        nominal: transaksi.keuntungan,
-        nama: user.nama,
-        idToko: user.toko_id,
-      });
+
+      await createLog(
+        {
+          kategori: "Transaksi Sparepart",
+          keterangan: `${user.nama} membuat transaksi sparepart`,
+          nominal: transaksi.keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
       return {
         id: transaksi.id,
         totalHarga,
       };
     });
-
-    // 📝 Log
   } catch (error) {
     console.error("Error createTransaksiSparepart:", error);
-    throw error;
+
+    throw new Error(
+      error.message || "Terjadi kesalahan saat membuat transaksi sparepart"
+    );
+  }
+};
+
+export const deleteTransaksiSparepart = async (idTransaksi, user) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const transaksi = await tx.transaksiSparepat.findUnique({
+        where: { id: idTransaksi },
+        include: { items: true },
+      });
+
+      if (!transaksi) {
+        throw new Error("Transaksi tidak ditemukan");
+      }
+
+      for (const item of transaksi.items) {
+        await tx.sparePart.update({
+          where: { id: item.idSparepart },
+          data: {
+            stok: { increment: item.quantity },
+          },
+        });
+      }
+
+      const now = new Date();
+
+      await tx.transaksiSparepat.update({
+        where: { id: idTransaksi },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      await tx.itemsTransaksiSparepart.updateMany({
+        where: {
+          idTransaksi,
+        },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Transaksi Sparepart",
+          keterangan: `${user.nama} menghapus transaksi sparepart`,
+          nominal: transaksi.keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error("Error deleteTransaksiSparepart:", error);
+
+    throw new Error(
+      error.message || "Terjadi kesalahan saat menghapus transaksi sparepart"
+    );
   }
 };
 
@@ -236,60 +299,6 @@ export const getAllTransaksiSparepart = async ({
       totalPages: Math.ceil(total / take),
     },
   };
-};
-
-// ✅ DELETE (rollback stok)
-export const deleteTransaksiSparepart = async (idTransaksi, user) => {
-  return await prisma.$transaction(async (tx) => {
-    // Cari transaksi
-    const transaksi = await tx.transaksiSparepat.findUnique({
-      where: { id: idTransaksi },
-      include: { items: true },
-    });
-
-    if (!transaksi) {
-      throw new Error("Transaksi tidak ditemukan");
-    }
-
-    // Kembalikan stok untuk setiap item
-    for (const item of transaksi.items) {
-      await tx.sparePart.update({
-        where: { id: item.idSparepart },
-        data: { stok: { increment: item.quantity } },
-      });
-    }
-
-    // Hapus items terlebih dahulu
-    const now = new Date();
-    const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-
-    // Hapus transaksi utama
-    await tx.transaksiSparepat.update({
-      where: { id: idTransaksi },
-      data: {
-        deletedAt: wib,
-      },
-    });
-
-    await tx.itemsTransaksiSparepart.updateMany({
-      where: {
-        idTransaksi: idTransaksi,
-      },
-      data: {
-        deletedAt: wib,
-      },
-    });
-
-    await createLog({
-      kategori: "Transaksi Sparepart",
-      keterangan: `${user.nama} telah menghapus Transaksi Sparepart`,
-      nominal: transaksi.keuntungan,
-      nama: user.nama,
-      idToko: user.toko_id,
-    });
-
-    return { success: true };
-  });
 };
 
 const getDateRange = (period, startDate, endDate) => {
@@ -408,11 +417,16 @@ export const getLaporanBarangKeluar = async ({
         hargaModal: item.Sparepart.hargaModal,
         hargaJual: item.Sparepart.hargaJual,
         qty: 0,
+        modal: 0, // field baru
+        keuntungan: 0,
         sumber: [], // Lacak sumber data
       };
     }
 
     acc[key].qty += item.quantity;
+    acc[key].modal += item.Sparepart.hargaModal * item.quantity;
+    acc[key].keuntungan +=
+      (item.Sparepart.hargaJual - item.Sparepart.hargaModal) * item.quantity;
     acc[key].sumber.push(item.sumber);
 
     return acc;

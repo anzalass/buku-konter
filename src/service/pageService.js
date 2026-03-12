@@ -783,6 +783,31 @@ export const cariSparepart = async (keyword = "", user) => {
   }
 };
 
+export const cariNoPelanggan = async (keyword = "", user) => {
+  try {
+    const keywords = keyword.split(" ").filter(Boolean);
+
+    return await prisma.dataMember.findMany({
+      where: {
+        AND: keywords.map((word) => ({
+          nama: {
+            contains: word,
+            mode: "insensitive",
+          },
+        })),
+        idToko: user?.toko_id,
+      },
+      orderBy: {
+        nama: "asc",
+      },
+      take: 20,
+    });
+  } catch (error) {
+    console.error("Error cari No Pelanggan:", error);
+    throw error;
+  }
+};
+
 export const cariVoucher = async (keyword = "", user) => {
   try {
     const keywords = keyword.split(" ").filter(Boolean);
@@ -796,6 +821,7 @@ export const cariVoucher = async (keyword = "", user) => {
           },
         })),
         idToko: user?.toko_id,
+        isActive: true,
       },
       orderBy: {
         nama: "asc",

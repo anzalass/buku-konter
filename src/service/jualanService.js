@@ -58,44 +58,100 @@ export const getKejadianTakTerdugaToday = async (user) => {
   });
 };
 
-// ✅ CREATE Jualan Harian (DateTime)
+/* =========================
+   CREATE JUALAN HARIAN
+========================= */
 export const createJualanHarian = async ({
   kategori,
   nominal,
-  penempatan,
   idMember,
   user,
   idToko,
 }) => {
-  if (!kategori || !nominal) {
-    throw new Error("Kategori dan nominal wajib diisi");
+  try {
+    if (!kategori || !nominal) {
+      throw new Error("Kategori dan nominal wajib diisi");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const jualan = await tx.jualanHarian.create({
+        data: {
+          kategori,
+          ...(idMember && {
+            Member: {
+              connect: { id: idMember },
+            },
+          }),
+          Toko: {
+            connect: {
+              id: idToko,
+            },
+          },
+          nominal,
+          tanggal: new Date(),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Trx Harian",
+          keterangan: `${user.nama} telah melakukan transaksi harian`,
+          nominal: nominal,
+          nama: user.nama,
+          idToko: idToko,
+        },
+        tx
+      );
+
+      return jualan;
+    });
+  } catch (error) {
+    console.error("Error createJualanHarian:", error);
+    throw new Error("Gagal membuat transaksi harian");
   }
+};
 
-  await prisma.jualanHarian.create({
-    data: {
-      kategori,
-      ...(idMember && {
-        Member: {
-          connect: { id: idMember },
-        },
-      }),
-      Toko: {
-        connect: {
-          id: idToko,
-        },
-      },
-      nominal: nominal, // tetap string sesuai model
-      tanggal: new Date(), // ✅ sekarang DateTime
-    },
-  });
+/* =========================
+   DELETE JUALAN HARIAN (SOFT DELETE)
+========================= */
+export const deleteJualanHarian = async (id, user) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const jualan = await tx.jualanHarian.findUnique({
+        where: { id },
+      });
 
-  await createLog({
-    kategori: "Trx Harian",
-    keterangan: `${user.nama} telah melakukan Trx harian`,
-    nominal: nominal,
-    nama: user.nama,
-    idToko: idToko,
-  });
+      if (!jualan) {
+        throw new Error("Transaksi harian tidak ditemukan");
+      }
+
+      const now = new Date();
+      const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+
+      await tx.jualanHarian.update({
+        where: { id },
+        data: {
+          deletedAt: wib,
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Trx Harian",
+          keterangan: `${user.nama} menghapus transaksi harian`,
+          nominal: jualan.nominal,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return true;
+    });
+  } catch (error) {
+    console.error("Error deleteJualanHarian:", error);
+    throw new Error("Gagal menghapus transaksi harian");
+  }
 };
 
 // ✅ CREATE Kejadian Tak Terduga
@@ -128,37 +184,6 @@ export const createKejadianTakTerduga = async ({
     nominal: nominal,
     nama: user.nama,
     idToko,
-  });
-};
-
-// ✅ DELETE (sama seperti sebelumnya)
-export const deleteJualanHarian = async (id, user) => {
-  const jualan = await prisma.jualanHarian.findUnique({
-    where: {
-      id,
-    },
-  });
-
-  if (!jualan) {
-    throw new Error("Jualan ga ditemuin");
-  }
-
-  const now = new Date();
-  const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-
-  await prisma.jualanHarian.update({
-    where: { id },
-    data: {
-      deletedAt: wib,
-    },
-  });
-
-  await createLog({
-    kategori: "Trx Harian",
-    keterangan: `${user.nama} telah mmenghapus Trx harian`,
-    nominal: jualan.nominal,
-    nama: user.nama,
-    idToko: user.toko_id,
   });
 };
 

@@ -68,31 +68,6 @@ export const getAllDownlines = async ({
 };
 
 // CREATE
-export const createDownline = async (data, user) => {
-  const { kodeDownline, nama, noHp } = data;
-  console.log(noHp);
-
-  if (!kodeDownline || !nama || !noHp) {
-    throw new Error("Kode downline dan nama wajib diisi");
-  }
-
-  const downline = await prisma.downline.create({
-    data: {
-      kodeDownline,
-      noHp,
-      nama,
-      createdAt: new Date(),
-      idToko: user.toko_id,
-    },
-  });
-
-  await createLog({
-    kategori: "Downline",
-    keterangan: `Menambah downline baru ${downline.nama}  `,
-    nama: user.nama,
-    idToko: user.toko_id,
-  });
-};
 
 // GET ONE
 export const getDownlineById = async (id) => {
@@ -101,58 +76,127 @@ export const getDownlineById = async (id) => {
   return downline;
 };
 
-// UPDATE
-export const updateDownline = async (id, data, user) => {
-  const { kodeDownline, nama } = data;
-  const oldDownline = await prisma.downline.findUnique({
-    where: {
-      id,
-    },
-  });
+/* =========================
+   CREATE DOWNLINE
+========================= */
+export const createDownline = async (data, user) => {
+  try {
+    const { kodeDownline, nama, noHp } = data;
 
-  if (!oldDownline) {
-    throw new Error("Downline tidak ditemukan");
+    if (!kodeDownline || !nama || !noHp) {
+      throw new Error("Kode downline, nama, dan noHp wajib diisi");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const downline = await tx.downline.create({
+        data: {
+          kodeDownline,
+          noHp,
+          nama,
+          createdAt: new Date(),
+          idToko: user.toko_id,
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Downline",
+          keterangan: `${user.nama} Menambah downline baru ${downline.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return downline;
+    });
+  } catch (error) {
+    console.error("Error createDownline:", error);
+    throw new Error("Gagal membuat downline");
   }
-  const downline = await prisma.downline.update({
-    where: { id },
-    data: {
-      ...(kodeDownline && { kodeDownline }),
-      ...(nama && { nama }),
-    },
-  });
-  await createLog({
-    kategori: "Downline",
-    keterangan: `Mengubah downline ${oldDownline.nama} - ${downline.nama}  `,
-    nama: user.nama,
-    idToko: user.toko_id,
-  });
 };
 
-// DELETE
-export const deleteDownline = async (id, user) => {
-  const oldDownline = await prisma.downline.findUnique({
-    where: {
-      id,
-    },
-  });
+/* =========================
+   UPDATE DOWNLINE
+========================= */
+export const updateDownline = async (id, data, user) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const { kodeDownline, nama } = data;
 
-  if (!oldDownline) {
-    throw new Error("Downline tidak ditemukan");
+      const oldDownline = await tx.downline.findUnique({
+        where: { id },
+      });
+
+      if (!oldDownline) {
+        throw new Error("Downline tidak ditemukan");
+      }
+
+      const downline = await tx.downline.update({
+        where: { id },
+        data: {
+          ...(kodeDownline !== undefined && { kodeDownline }),
+          ...(nama !== undefined && { nama }),
+          updatedAt: new Date(),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Downline",
+          keterangan: `${user.nama} Mengubah downline ${oldDownline.nama} → ${downline.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return downline;
+    });
+  } catch (error) {
+    console.error("Error updateDownline:", error);
+    throw new Error("Gagal mengupdate downline");
   }
-  // Opsional: cek relasi transaksiVoucherDownline jika perlu
-  await prisma.downline.update({
-    where: { id },
-    data: {
-      isActive: false,
-    },
-  });
+};
 
-  await createLog({
-    kategori: "Downline",
-    keterangan: `Menghapus downline ${oldDownline.nama} `,
-    nama: user.nama,
-    idToko: user.toko_id,
-  });
+/* =========================
+   DELETE DOWNLINE (SOFT DELETE)
+========================= */
+export const deleteDownline = async (id, user) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const oldDownline = await tx.downline.findUnique({
+        where: { id },
+      });
+
+      if (!oldDownline) {
+        throw new Error("Downline tidak ditemukan");
+      }
+
+      await tx.downline.update({
+        where: { id },
+        data: {
+          isActive: false,
+          updatedAt: new Date(),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Downline",
+          keterangan: `${user.nama} Menghapus downline ${oldDownline.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return true;
+    });
+  } catch (error) {
+    console.error("Error deleteDownline:", error);
+    throw new Error("Gagal menghapus downline");
+  }
 };
 
 export const masterDownlines = async (user) => {

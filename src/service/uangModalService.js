@@ -52,89 +52,135 @@ export const getAllUangModal = async ({
   };
 };
 
-// ✅ CREATE
 export const createUangModal = async (data) => {
-  const { keterangan, tanggal, jumlah, penempatan, idUser, idToko, user } =
-    data;
+  try {
+    const { keterangan, tanggal, jumlah, idToko, user } = data;
 
-  if (!keterangan || !tanggal || jumlah == null || !idToko) {
-    throw new Error("Semua field wajib diisi");
+    if (!keterangan || !tanggal || jumlah == null || !idToko) {
+      throw new Error("Semua field wajib diisi");
+    }
+
+    if (Number(jumlah) <= 0) {
+      throw new Error("Jumlah harus lebih dari 0");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const modal = await tx.uangModal.create({
+        data: {
+          keterangan,
+          idToko,
+          tanggal: new Date(tanggal),
+          jumlah: Number(jumlah),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Uang Keluar",
+          keterangan: `${user.nama} menambahkan catatan ${keterangan} uang keluar`,
+          nominal: jumlah,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return modal;
+    });
+  } catch (error) {
+    console.error("Error createUangModal:", error);
+
+    throw new Error(
+      error.message || "Terjadi kesalahan saat menambahkan uang modal"
+    );
   }
-
-  // Validasi jumlah
-  if (jumlah <= 0) {
-    throw new Error("Jumlah harus lebih dari 0");
-  }
-
-  await prisma.uangModal.create({
-    data: {
-      keterangan,
-      idToko: idToko,
-      tanggal: new Date(tanggal),
-      jumlah: Number(jumlah),
-    },
-  });
-
-  await createLog({
-    kategori: "Uang Keluar",
-    keterangan: `${user.nama} Menambahkan Catatan ${keterangan} Uang Keluar`,
-    nominal: jumlah,
-    nama: user.nama,
-    idToko: user.toko_id,
-  });
 };
 
-// ✅ UPDATE
 export const updateUangModal = async (id, data, user) => {
-  const { keterangan, tanggal, jumlah } = data;
+  try {
+    const { keterangan, tanggal, jumlah } = data;
 
-  if (!keterangan || !tanggal || jumlah == null) {
-    throw new Error("Semua field wajib diisi");
+    if (!keterangan || !tanggal || jumlah == null) {
+      throw new Error("Semua field wajib diisi");
+    }
+
+    if (Number(jumlah) <= 0) {
+      throw new Error("Jumlah harus lebih dari 0");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.uangModal.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        throw new Error("Data uang modal tidak ditemukan");
+      }
+
+      const updated = await tx.uangModal.update({
+        where: { id },
+        data: {
+          keterangan,
+          tanggal: new Date(tanggal),
+          jumlah: Number(jumlah),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Uang Keluar",
+          keterangan: `${user.nama} mengupdate catatan ${keterangan} uang keluar`,
+          nominal: jumlah,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return updated;
+    });
+  } catch (error) {
+    console.error("Error updateUangModal:", error);
+
+    throw new Error(
+      error.message || "Terjadi kesalahan saat mengupdate uang modal"
+    );
   }
-
-  if (jumlah <= 0) {
-    throw new Error("Jumlah harus lebih dari 0");
-  }
-
-  const existing = await prisma.uangModal.findUnique({ where: { id } });
-  if (!existing) {
-    throw new Error("Data uang modal tidak ditemukan");
-  }
-
-  await prisma.uangModal.update({
-    where: { id },
-    data: {
-      keterangan,
-      tanggal: new Date(tanggal),
-      jumlah: Number(jumlah),
-    },
-  });
-
-  await createLog({
-    kategori: "Uang Keluar",
-    keterangan: `${user.nama} Mengupdate Catatan ${keterangan} Uang Keluar`,
-    nominal: jumlah,
-    nama: user.nama,
-    idToko: user.toko_id,
-  });
 };
 
-// ✅ DELETE
 export const deleteUangModal = async (id, user) => {
-  const existing = await prisma.uangModal.findUnique({ where: { id } });
-  if (!existing) {
-    throw new Error("Data uang modal tidak ditemukan");
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.uangModal.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        throw new Error("Data uang modal tidak ditemukan");
+      }
+
+      await createLog(
+        {
+          kategori: "Uang Keluar",
+          keterangan: `${user.nama} menghapus catatan ${existing.keterangan} uang keluar`,
+          nominal: existing.jumlah,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      await tx.uangModal.delete({
+        where: { id },
+      });
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error("Error deleteUangModal:", error);
+
+    throw new Error(
+      error.message || "Terjadi kesalahan saat menghapus uang modal"
+    );
   }
-
-  await createLog({
-    kategori: "Uang Keluar",
-    keterangan: `${user.nama} Menghapus Catatan ${existing.keterangan} Uang Keluar`,
-    nominal: existing.jumlah,
-    nama: user.nama,
-    idToko: user.toko_id,
-  });
-
-  await prisma.uangModal.delete({ where: { id } });
-
-  return { success: true };
 };

@@ -1,5 +1,6 @@
 import {
   cariAksesoris,
+  cariNoPelanggan,
   cariSparepart,
   cariVoucher,
   dashboardPageService,
@@ -179,6 +180,26 @@ export const cariSparepartController = async (req, res) => {
     const { q = "" } = req.query;
 
     const data = await cariSparepart(q, req.user);
+
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil mencari sparepart",
+      data,
+    });
+  } catch (error) {
+    console.error("cariSparepartController:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal mencari sparepart",
+    });
+  }
+};
+
+export const cariNoPelangganController = async (req, res) => {
+  try {
+    const { q = "" } = req.query;
+
+    const data = await cariNoPelanggan(q, req.user);
 
     return res.status(200).json({
       success: true,

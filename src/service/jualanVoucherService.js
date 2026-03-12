@@ -1,10 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 import { createLog } from "./logService.js";
+
 const prisma = new PrismaClient();
 
+/* =========================
+   CREATE JUALAN VOUCHER
+========================= */
 export const createJualan = async (data, user) => {
   try {
-    await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx) => {
       // 1️⃣ Ambil voucher
       const voucher = await tx.voucher.findUnique({
         where: { id: data?.idVoucher },
@@ -15,13 +19,13 @@ export const createJualan = async (data, user) => {
       }
 
       if (voucher.stok <= 0) {
-        throw new Error("Stok habis");
+        throw new Error("Stok voucher habis");
       }
 
       const keuntungan = voucher.hargaEceran - voucher.hargaPokok;
 
       // 2️⃣ Buat transaksi
-      await tx.transaksiVoucherHarian.create({
+      const transaksi = await tx.transaksiVoucherHarian.create({
         data: {
           idVoucher: voucher.id,
           keuntungan,
@@ -40,71 +44,91 @@ export const createJualan = async (data, user) => {
         },
       });
 
-      // 5️⃣ Create log
-      await createLog({
-        kategori: "Jualan Voucher Harian",
-        keterangan: `${user.nama} telah menambah Jualan Voucher harian`,
-        nominal: keuntungan, // <- pastikan ini benar
-        nama: user.nama,
-        idToko: user.toko_id,
-      });
+      // 4️⃣ Log transaksi
+      await createLog(
+        {
+          kategori: "Jualan Voucher Harian",
+          keterangan: `${user.nama} menjual voucher ${voucher.nama}`,
+          nominal: keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return transaksi;
     });
   } catch (error) {
     console.error("Error createJualan:", error);
-    throw error;
+    throw new Error("Gagal membuat transaksi voucher");
   }
 };
+
+/* =========================
+   DELETE TRANSAKSI VOUCHER
+========================= */
 export const deleteTransaksiVoucher = async (idTransaksi, user) => {
   try {
-    const transaksi = await prisma.transaksiVoucherHarian.findUnique({
-      where: { id: idTransaksi },
-      include: { Voucher: true }, // Ambil data voucher terkait
-    });
+    return await prisma.$transaction(async (tx) => {
+      const transaksi = await tx.transaksiVoucherHarian.findUnique({
+        where: { id: idTransaksi },
+        include: { Voucher: true },
+      });
 
-    if (!transaksi) {
-      throw new Error("Transaksi tidak ditemukan");
-    }
+      if (!transaksi) {
+        throw new Error("Transaksi tidak ditemukan");
+      }
 
-    const voucher = transaksi.Voucher;
-    if (!voucher) {
-      throw new Error("Voucher terkait tidak ditemukan");
-    }
+      const voucher = transaksi.Voucher;
 
-    const now = new Date();
-    const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-    await prisma.$transaction([
-      prisma.transaksiVoucherHarian.update({
+      if (!voucher) {
+        throw new Error("Voucher terkait tidak ditemukan");
+      }
+
+      const now = new Date();
+      const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+
+      // 1️⃣ Soft delete transaksi
+      await tx.transaksiVoucherHarian.update({
         where: { id: idTransaksi },
         data: {
           deletedAt: wib,
         },
-      }),
-      // Kembalikan stok (+1)
-      prisma.voucher.update({
+      });
+
+      // 2️⃣ Kembalikan stok
+      await tx.voucher.update({
         where: { id: voucher.id },
-        data: { stok: { increment: 1 } }, // ✅ Kembalikan stok!
-      }),
-    ]);
+        data: {
+          stok: {
+            increment: 1,
+          },
+        },
+      });
 
-    await createLog({
-      kategori: "Jualan Voucher Harian",
-      keterangan: `${user.nama} telah mmenghapus Trx harian`,
-      nominal: voucher.hargaJual,
-      nama: user.nama,
-      idToko: user.toko_id,
+      // 3️⃣ Log
+      await createLog(
+        {
+          kategori: "Jualan Voucher Harian",
+          keterangan: `${user.nama} menghapus transaksi voucher ${voucher.nama}`,
+          nominal: voucher.hargaEceran,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return {
+        success: true,
+        message: "Transaksi berhasil dihapus dan stok dikembalikan",
+        restoredStok: voucher.stok + 1,
+      };
     });
-
-    return {
-      success: true,
-      message: "Transaksi berhasil dihapus dan stok dikembalikan",
-      restoredStok: voucher.stok + 1,
-    };
   } catch (error) {
     console.error("Error deleteTransaksiVoucher:", error);
     throw new Error(error.message || "Gagal menghapus transaksi");
   }
 };
-
 export const getJualanVoucherHarian = async (
   user,
   { deletedFilter = "active" } = {}
@@ -430,12 +454,16 @@ export const getLaporanVoucherTerlaris = async ({
         const v = voucherMap[g.idVoucher];
         const jumlahTerjual = g._count.id;
         const totalKeuntungan = g._sum.keuntungan ?? 0;
+        const hargaModal = v.hargaModal;
+        const hargaEceran = v.hargaEceran;
         const totalPendapatan = jumlahTerjual * (v.hargaEceran ?? 0);
         const modal = jumlahTerjual * (v.hargaPokok ?? 0);
 
         return {
           voucher: v,
           jumlahTerjual,
+          hargaModal,
+          hargaEceran,
           totalKeuntungan,
           totalPendapatan,
           modal,

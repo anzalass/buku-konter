@@ -13,13 +13,10 @@ import {
 export const createJualanHarianHandler = async (req, res) => {
   try {
     const { kategori, nominal, tanggal, idMember } = req.body;
-    const penempatan = req.user.penempatan;
-    const idUser = req.user.id;
     const idToko = req.user.toko_id;
     const result = await createJualanHarian({
       kategori,
       nominal,
-      penempatan,
       idMember,
       tanggal,
       user: req.user,

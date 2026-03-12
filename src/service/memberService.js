@@ -122,108 +122,147 @@ export const getMemberById = async (id) => {
   }
 };
 
-// ─── 4. CREATE MEMBER ───────────────────────────────────────────────
+/* =========================
+   CREATE MEMBER
+========================= */
 export const createMember = async (data, user) => {
   try {
-    // Validasi data (opsional)
-    if (!data.nama) throw new Error("Nama wajib diisi");
+    if (!data.nama) {
+      throw new Error("Nama wajib diisi");
+    }
 
-    const toko = await prisma.toko.findUnique({
-      where: {
-        id: user.toko_id,
-      },
+    return await prisma.$transaction(async (tx) => {
+      const toko = await tx.toko.findUnique({
+        where: { id: user.toko_id },
+      });
+
+      if (!toko) {
+        throw new Error("Toko tidak ditemukan");
+      }
+
+      const uniqueMember =
+        toko.namaToko.toUpperCase().replace(/\s+/g, "") +
+        "-" +
+        Math.floor(Date.now() / 1000);
+
+      const member = await tx.member.create({
+        data: {
+          nama: data.nama,
+          noTelp: data.noTelp || null,
+          kodeMember: uniqueMember,
+          idToko: user.toko_id,
+        },
+        select: {
+          id: true,
+          nama: true,
+          noTelp: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Member",
+          keterangan: `${user.nama} menambah member ${member.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return member;
     });
-
-    const uniqueMember =
-      toko.namaToko.toUpperCase().replace(/\s+/g, "") +
-      "-" +
-      Math.floor(Date.now() / 1000);
-
-    const member = await prisma.member.create({
-      data: {
-        nama: data.nama,
-        noTelp: data.noTelp || null,
-        kodeMember: uniqueMember.toString(),
-        idToko: data.idToko,
-      },
-      select: {
-        id: true,
-        nama: true,
-        noTelp: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    await createLog({
-      kategori: "Member",
-      keterangan: `${user.nama} telah menambah Member`,
-      nama: user.nama,
-      idToko: user.toko_id,
-    });
-    return member;
   } catch (error) {
+    console.error("Error createMember:", error);
     throw new Error(`Gagal membuat member: ${error.message}`);
   }
 };
 
-// ─── 5. UPDATE MEMBER ───────────────────────────────────────────────
-export const updateMember = async (id, data) => {
+/* =========================
+   UPDATE MEMBER
+========================= */
+export const updateMember = async (id, data, user) => {
   try {
-    const member = await prisma.member.update({
-      where: { id },
-      data: {
-        ...(data.nama && { nama: data.nama }),
-        ...(data.noTelp !== undefined && { noTelp: data.noTelp }),
-      },
-      select: {
-        id: true,
-        nama: true,
-        noTelp: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    return await prisma.$transaction(async (tx) => {
+      const member = await tx.member.update({
+        where: { id },
+        data: {
+          ...(data.nama !== undefined && { nama: data.nama }),
+          ...(data.noTelp !== undefined && { noTelp: data.noTelp }),
+        },
+        select: {
+          id: true,
+          nama: true,
+          noTelp: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
 
-    await createLog({
-      kategori: "Member",
-      keterangan: `${user.nama} telah mengupdate Member ${member.nama}`,
-      nama: user.nama,
-      idToko: user.toko_id,
-    });
+      await createLog(
+        {
+          kategori: "Member",
+          keterangan: `${user.nama} mengupdate member ${member.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
 
-    return member;
+      return member;
+    });
   } catch (error) {
+    console.error("Error updateMember:", error);
+
     if (error.code === "P2025") {
       throw new Error("Member tidak ditemukan");
     }
+
     throw new Error(`Gagal update member: ${error.message}`);
   }
 };
 
-// ─── 6. DELETE MEMBER ───────────────────────────────────────────────
+/* =========================
+   DELETE MEMBER
+========================= */
 export const deleteMember = async (id, user) => {
   try {
-    const member = await prisma.member.findUnique({
-      where: { id },
-    });
+    return await prisma.$transaction(async (tx) => {
+      const member = await tx.member.findUnique({
+        where: { id },
+      });
 
-    await createLog({
-      kategori: "Member",
-      keterangan: `${user.nama} telah menghapus Member ${member.nama}`,
-      nama: user.nama,
-      idToko: user.toko_id,
-    });
+      if (!member) {
+        throw new Error("Member tidak ditemukan");
+      }
 
-    await prisma.member.delete({
-      where: { id },
-    });
+      await tx.member.delete({
+        where: { id },
+      });
 
-    return { success: true, message: "Member berhasil dihapus" };
+      await createLog(
+        {
+          kategori: "Member",
+          keterangan: `${user.nama} menghapus member ${member.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return {
+        success: true,
+        message: "Member berhasil dihapus",
+      };
+    });
   } catch (error) {
+    console.error("Error deleteMember:", error);
+
     if (error.code === "P2025") {
       throw new Error("Member tidak ditemukan");
     }
+
     throw new Error(`Gagal menghapus member: ${error.message}`);
   }
 };
