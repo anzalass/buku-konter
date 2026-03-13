@@ -42,8 +42,8 @@ export const AuthMiddleware2 = async (req, res, next) => {
     const data = {
       token: token,
       nama: decoded.nama,
-      penempatan: decoded.penempatan,
       id: decoded.id,
+      role: decoded.role,
       // toko_id: decoded.toko_id,
     };
 

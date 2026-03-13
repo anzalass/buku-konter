@@ -78,8 +78,12 @@ export const createTransaksiSparepart = async (
           keuntungan,
           namaPembeli: member?.nama || nama || generateRandomCode(),
           tanggal: new Date(),
-          idToko: user.toko_id,
 
+          Toko: {
+            connect: {
+              id: user.toko_id,
+            },
+          },
           ...(member && {
             Member: {
               connect: { id: member.id },
@@ -90,7 +94,11 @@ export const createTransaksiSparepart = async (
             create: items.map((item) => ({
               quantity: item.quantity,
               tanggal: new Date(),
-              idToko: user.toko_id,
+              Toko: {
+                connect: {
+                  id: user.toko_id,
+                },
+              },
               Sparepart: {
                 connect: { id: item.idSparepart },
               },

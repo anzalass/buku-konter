@@ -48,6 +48,7 @@ import superAdminRoutes from "./routes/superAdminRoutes.js";
 import logRoutes from "./routes/logRoutes.js";
 import tokoRoutes from "./routes/tokoRoutes.js";
 import dataMemberRoutes from "./routes/dataMemberRoutes.js";
+import keuntunganRoutes from "./routes/keuntunganRoutes.js";
 
 import { startDailyKeuntunganCron } from "./service/keuntunganService.js";
 
@@ -71,6 +72,7 @@ app.use("/api/v1", voucherHarian);
 app.use("/api/v1", logRoutes);
 app.use("/api/v1", tokoRoutes);
 app.use("/api/v1", dataMemberRoutes);
+app.use("/api/v1", keuntunganRoutes);
 
 app.use(errorHandler);
 startDailyKeuntunganCron();

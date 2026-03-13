@@ -16,37 +16,61 @@ export const generateDailyKeuntungan = async (idToko) => {
     const [trx, vd, acc, sparepart, service, grosir] = await Promise.all([
       // Transaksi Harian
       prisma.jualanHarian.aggregate({
-        where: { idToko, createdAt: { gte: todayStart, lte: todayEnd } },
+        where: {
+          idToko,
+          createdAt: { gte: todayStart, lte: todayEnd },
+          deletedAt: null,
+        },
         _sum: { nominal: true },
       }),
 
       // Voucher Harian
       prisma.transaksiVoucherHarian.aggregate({
-        where: { idToko, createdAt: { gte: todayStart, lte: todayEnd } },
+        where: {
+          idToko,
+          createdAt: { gte: todayStart, lte: todayEnd },
+          deletedAt: null,
+        },
         _sum: { keuntungan: true },
       }),
 
       // Aksesoris
       prisma.transaksiAksesoris.aggregate({
-        where: { idToko, createdAt: { gte: todayStart, lte: todayEnd } },
+        where: {
+          idToko,
+          createdAt: { gte: todayStart, lte: todayEnd },
+          deletedAt: null,
+        },
         _sum: { keuntungan: true },
       }),
 
       // Sparepart
       prisma.transaksiSparepat.aggregate({
-        where: { idToko, createdAt: { gte: todayStart, lte: todayEnd } },
+        where: {
+          idToko,
+          createdAt: { gte: todayStart, lte: todayEnd },
+          deletedAt: null,
+        },
         _sum: { keuntungan: true },
       }),
 
       // Service HP
       prisma.serviceHP.aggregate({
-        where: { idToko, createdAt: { gte: todayStart, lte: todayEnd } },
+        where: {
+          idToko,
+          createdAt: { gte: todayStart, lte: todayEnd },
+          deletedAt: null,
+        },
         _sum: { keuntungan: true },
       }),
 
       // Grosir Voucher
       prisma.transaksiVoucherDownline.aggregate({
-        where: { idToko, createdAt: { gte: todayStart, lte: todayEnd } },
+        where: {
+          idToko,
+          createdAt: { gte: todayStart, lte: todayEnd },
+          deletedAt: null,
+        },
         _sum: { keuntungan: true },
       }),
     ]);
@@ -345,31 +369,28 @@ export const getKeuntunganChartDataFromTable = async (
   const now = new Date();
   let startDate;
 
-  // Tentukan tanggal mulai berdasarkan periode
   switch (periode) {
     case "harian":
-      // 7 hari terakhir
       startDate = new Date(now);
-      startDate.setDate(startDate.getDate() - 6); // Termasuk hari ini = 7 hari
+      startDate.setDate(startDate.getDate() - 6);
       break;
+
     case "mingguan":
-      // 4 minggu terakhir = 28 hari
       startDate = new Date(now);
-      startDate.setDate(startDate.getDate() - 27); // Termasuk hari ini = 28 hari
+      startDate.setDate(startDate.getDate() - 27);
       break;
+
     case "bulanan":
-      // 6 bulan terakhir
       startDate = new Date(now);
-      startDate.setMonth(startDate.getMonth() - 5); // Termasuk bulan ini = 6 bulan
+      startDate.setMonth(startDate.getMonth() - 5);
       break;
+
     default:
       throw new Error("Periode tidak valid");
   }
 
-  // Pastikan jam 00:00:00
   startDate.setHours(0, 0, 0, 0);
 
-  // Ambil data dari tabel Keuntungan
   const records = await prisma.keuntungan.findMany({
     where: {
       idToko,
@@ -378,28 +399,53 @@ export const getKeuntunganChartDataFromTable = async (
         lte: now,
       },
     },
-    orderBy: {
-      createdAt: "asc",
-    },
   });
 
-  // Format data untuk grafik
-  const chartData = records.map((record) => ({
-    // Format tanggal sesuai periode
-    tanggal: formatTanggal(record.createdAt, periode),
+  // generate label bucket
+  const labels = generateDateLabels(periode, startDate, now);
 
-    // Konversi BigInt ke Number (aman untuk grafik)
-    keuntunganTrx: Number(record.keuntunganTransaksi),
-    keuntunganVd: Number(record.keuntunganVoucherHarian),
-    keuntunganAcc: Number(record.keuntunganAcc),
-    keuntunganSparepart: Number(record.keuntunganSparepart),
-    keuntunganService: Number(record.keuntunganService),
-    keuntunganGrosirVd: Number(record.keuntunganGrosirVoucher),
-  }));
+  const chartData = labels.map((bucket) => {
+    const bucketRecords = records.filter(
+      (r) => r.createdAt >= bucket.startDate && r.createdAt <= bucket.endDate
+    );
+
+    return {
+      tanggal: bucket.label,
+
+      keuntunganTrx: bucketRecords.reduce(
+        (sum, r) => sum + Number(r.keuntunganTransaksi),
+        0
+      ),
+
+      keuntunganVd: bucketRecords.reduce(
+        (sum, r) => sum + Number(r.keuntunganVoucherHarian),
+        0
+      ),
+
+      keuntunganAcc: bucketRecords.reduce(
+        (sum, r) => sum + Number(r.keuntunganAcc),
+        0
+      ),
+
+      keuntunganSparepart: bucketRecords.reduce(
+        (sum, r) => sum + Number(r.keuntunganSparepart),
+        0
+      ),
+
+      keuntunganService: bucketRecords.reduce(
+        (sum, r) => sum + Number(r.keuntunganService),
+        0
+      ),
+
+      keuntunganGrosirVd: bucketRecords.reduce(
+        (sum, r) => sum + Number(r.keuntunganGrosirVoucher),
+        0
+      ),
+    };
+  });
 
   return chartData;
 };
-
 /**
  * Format tanggal untuk label grafik
  */
@@ -420,3 +466,114 @@ function formatTanggal(date, periode) {
   }
   return date.toISOString().split("T")[0];
 }
+
+const convertBigInt = (obj) => {
+  return JSON.parse(
+    JSON.stringify(obj, (_, value) =>
+      typeof value === "bigint" ? Number(value) : value
+    )
+  );
+};
+
+export const getKeuntunganService = async ({
+  idToko,
+  filter,
+  startDate,
+  endDate,
+}) => {
+  const now = new Date();
+  let start;
+  let end;
+
+  switch (filter) {
+    case "hari":
+      start = new Date(now.setHours(0, 0, 0, 0));
+      end = new Date(now.setHours(23, 59, 59, 999));
+      break;
+
+    case "minggu":
+      const firstDayWeek = new Date(now);
+      firstDayWeek.setDate(now.getDate() - now.getDay());
+
+      const lastDayWeek = new Date(firstDayWeek);
+      lastDayWeek.setDate(firstDayWeek.getDate() + 6);
+
+      start = firstDayWeek;
+      end = lastDayWeek;
+      break;
+
+    case "bulan":
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      break;
+
+    case "tahun":
+      start = new Date(now.getFullYear(), 0, 1);
+      end = new Date(now.getFullYear(), 11, 31);
+      break;
+
+    case "custom":
+      start = new Date(startDate);
+      end = new Date(endDate);
+      break;
+  }
+
+  const where = {
+    idToko,
+    ...(start &&
+      end && {
+        createdAt: {
+          gte: start,
+          lte: end,
+        },
+      }),
+  };
+
+  const data = await prisma.keuntungan.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+  });
+
+  const dataWithTotal = data.map((item) => {
+    const totalKeuntungan =
+      Number(item.keuntunganTransaksi) +
+      Number(item.keuntunganVoucherHarian) +
+      Number(item.keuntunganAcc) +
+      Number(item.keuntunganSparepart) +
+      Number(item.keuntunganService) +
+      Number(item.keuntunganGrosirVoucher);
+
+    return {
+      ...item,
+      totalKeuntungan,
+    };
+  });
+
+  const total = await prisma.keuntungan.aggregate({
+    where,
+    _sum: {
+      keuntunganTransaksi: true,
+      keuntunganVoucherHarian: true,
+      keuntunganAcc: true,
+      keuntunganSparepart: true,
+      keuntunganService: true,
+      keuntunganGrosirVoucher: true,
+    },
+  });
+
+  const totalKeseluruhan =
+    Number(total._sum.keuntunganTransaksi || 0) +
+    Number(total._sum.keuntunganVoucherHarian || 0) +
+    Number(total._sum.keuntunganAcc || 0) +
+    Number(total._sum.keuntunganSparepart || 0) +
+    Number(total._sum.keuntunganService || 0) +
+    Number(total._sum.keuntunganGrosirVoucher || 0);
+
+  return convertBigInt({
+    data: dataWithTotal,
+    total: {
+      ...total._sum,
+      totalKeuntungan: totalKeseluruhan,
+    },
+  });
+};

@@ -87,7 +87,12 @@ export const createTransaksiAksesoris = async (
           namaPembeli: member?.nama || nama || generateRandomCode(),
           status,
           tanggal: new Date(),
-          idToko: user.toko_id,
+
+          Toko: {
+            connect: {
+              id: user.toko_id,
+            },
+          },
 
           ...(member && {
             Member: {
@@ -99,7 +104,11 @@ export const createTransaksiAksesoris = async (
             create: itemsToCreate.map((item) => ({
               quantity: item.quantity,
               tanggal: new Date(),
-              idToko: user.toko_id,
+              Toko: {
+                connect: {
+                  id: user.toko_id,
+                },
+              },
               Aksesoris: {
                 connect: { id: item.idAksesoris },
               },
@@ -107,7 +116,6 @@ export const createTransaksiAksesoris = async (
           },
         },
       });
-
       // update stok
       for (const item of itemsToCreate) {
         await tx.aksesoris.update({

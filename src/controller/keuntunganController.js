@@ -3,6 +3,7 @@
 import {
   getKeuntunganChartData,
   getKeuntunganChartDataFromTable,
+  getKeuntunganService,
 } from "../service/keuntunganService.js";
 
 export const getKeuntunganChart = async (req, res) => {
@@ -41,5 +42,31 @@ export const getKeuntunganChart2 = async (req, res) => {
   }
 };
 
+export const getKeuntunganController = async (req, res) => {
+  try {
+    const { filter, startDate, endDate } = req.query;
+
+    const idToko = req.user.toki_id;
+
+    const result = await getKeuntunganService({
+      idToko,
+      filter,
+      startDate,
+      endDate,
+    });
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // Route
-app.get("/api/keuntungan/chart", authenticateToken, getKeuntunganChart);
