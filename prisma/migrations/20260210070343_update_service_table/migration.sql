@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE "ServiceHP" ALTER COLUMN "noHP" SET DATA TYPE TEXT;

@@ -30,16 +30,11 @@ app.use(
 app.use(bodyParser.json());
 
 import authRoutes from "./routes/authRoutes.js";
-import aksesorisRoutes from "./routes/aksesorisRoutes.js";
-import sparepartRoutes from "./routes/sparepartRoutes.js";
-import voucherRoutes from "./routes/voucherRoutes.js";
-import downlineRoutes from "./routes/downlineRoutes.js";
+import produkRoutes from "./routes/produkRoutes.js";
 import serviceRoutes from "./routes/serviceHPRoutes.js";
 import uangModalRoutes from "./routes/uangModalRoutes.js";
 import pageRoutes from "./routes/pageRoutes.js";
-import transaksiSparepart from "./routes/transaksiSparepartRoutes .js";
 
-import transaksiAksesoris from "./routes/transaksiAksesorisRoutes.js";
 import transaksiVoucher from "./routes/transaksiVoucherRoutes.js";
 import jualanHarian from "./routes/jualanRoutes.js";
 import memberRoutes from "./routes/memberRoutes.js";
@@ -53,19 +48,14 @@ import keuntunganRoutes from "./routes/keuntunganRoutes.js";
 import { startDailyKeuntunganCron } from "./service/keuntunganService.js";
 
 app.use("/api/v1", authRoutes);
-app.use("/api/v1", aksesorisRoutes);
-app.use("/api/v1", voucherRoutes);
-app.use("/api/v1", downlineRoutes);
+app.use("/api/v1", produkRoutes);
 app.use("/api/v1", serviceRoutes);
-app.use("/api/v1", sparepartRoutes);
 app.use("/api/v1", uangModalRoutes);
 app.use("/api/v1", superAdminRoutes);
 
 app.use("/api/v1", pageRoutes);
 
 app.use("/api/v1", transaksiVoucher);
-app.use("/api/v1", transaksiAksesoris);
-app.use("/api/v1", transaksiSparepart);
 app.use("/api/v1", jualanHarian);
 app.use("/api/v1", memberRoutes);
 app.use("/api/v1", voucherHarian);
