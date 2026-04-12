@@ -34,14 +34,14 @@ export const getMembersWithFilter = async ({
   sortOrder = "desc",
   startDate,
   endDate,
-  minTotalTransaksi,
-  maxTotalTransaksi,
   idToko,
 }) => {
   // Validasi input
   page = Math.max(1, parseInt(page));
   pageSize = Math.min(100, Math.max(1, parseInt(pageSize))); // Max 100 per halaman
   sortOrder = sortOrder === "asc" ? "asc" : "desc";
+
+  console.log(search);
 
   // Kolom yang boleh di-sort
   const allowedSortFields = ["nama", "createdAt", "updatedAt"];
@@ -285,13 +285,13 @@ export const getTrxMember = async (idMember) => {
       id: idMember,
     },
   });
-  const [voucherHarian, serviceHp, trxAksesoris, trxSparepart, jualanHarian] =
+  const [voucherHarian, serviceHp, trxSparepart, jualanHarian] =
     await Promise.all([
       prisma.transaksiVoucherHarian.findMany({
         where: { idMember, deletedAt: null },
         orderBy: { createdAt: "desc" },
         include: {
-          Voucher: {
+          Produk: {
             select: { nama: true, hargaEceran: true },
           },
         },
@@ -303,36 +303,22 @@ export const getTrxMember = async (idMember) => {
         include: {
           Sparepart: {
             include: {
-              Sparepart: {
-                select: { nama: true, hargaJual: true },
+              Produk: {
+                select: { nama: true, hargaEceran: true },
               },
             },
           },
         },
       }),
 
-      prisma.transaksiAksesoris.findMany({
+      prisma.transaksi.findMany({
         where: { idMember, deletedAt: null },
         orderBy: { tanggal: "desc" },
         include: {
           items: {
             include: {
-              Aksesoris: {
-                select: { nama: true, hargaJual: true },
-              },
-            },
-          },
-        },
-      }),
-
-      prisma.transaksiSparepat.findMany({
-        where: { idMember, deletedAt: null },
-        orderBy: { tanggal: "desc" },
-        include: {
-          items: {
-            include: {
-              Sparepart: {
-                select: { nama: true, hargaJual: true },
+              Produk: {
+                select: { nama: true, hargaEceran: true },
               },
             },
           },
@@ -389,36 +375,21 @@ export const getTrxMember = async (idMember) => {
   /* =========================
      3️⃣ AKSESORIS
   ========================== */
-  trxAksesoris.forEach((trx) => {
-    result.push({
-      jenis: "aksesoris",
-      id: trx.id,
-      tanggal: trx.tanggal,
-      totalHarga: trx.totalHarga ?? 0,
-      keuntungan: trx.keuntungan ?? 0,
-      items:
-        trx.items?.map((item) => ({
-          nama: item.Aksesoris?.nama,
-          harga: item.Aksesoris?.hargaJual,
-          qty: item.quantity,
-        })) ?? [],
-    });
-  });
 
   /* =========================
      4️⃣ SPAREPART
   ========================== */
   trxSparepart.forEach((trx) => {
     result.push({
-      jenis: "sparepart",
+      jenis: "penjualan",
       id: trx.id,
       tanggal: trx.tanggal,
       totalHarga: trx.totalHarga ?? 0,
       keuntungan: trx.keuntungan ?? 0,
       items:
         trx.items?.map((item) => ({
-          nama: item.Sparepart?.nama,
-          harga: item.Sparepart?.hargaJual,
+          nama: item.Produk?.nama,
+          harga: item.Produk?.hargaEceran,
           qty: item.quantity,
         })) ?? [],
     });
@@ -429,7 +400,7 @@ export const getTrxMember = async (idMember) => {
   ========================== */
   jualanHarian.forEach((trx) => {
     result.push({
-      jenis: "jualanHarian",
+      jenis: "transaksi",
       id: trx.id,
       tanggal: trx.tanggal,
       totalHarga: trx.nominal ?? 0,

@@ -47,7 +47,7 @@ export const createServiceHP = async (data, user) => {
           throw new Error("Item sparepart tidak valid");
         }
 
-        const sparepart = await tx.sparePart.findUnique({
+        const sparepart = await tx.produk.findUnique({
           where: { id },
         });
 
@@ -59,8 +59,8 @@ export const createServiceHP = async (data, user) => {
           throw new Error(`Stok ${sparepart.nama} tidak cukup`);
         }
 
-        const hargaTotal = sparepart.hargaJual * qty;
-        const keuntungan = (sparepart.hargaJual - sparepart.hargaModal) * qty;
+        const hargaTotal = sparepart.hargaModal * qty;
+        const keuntungan = (sparepart.hargaEceran - sparepart.hargaModal) * qty;
 
         totalHargaSparepart += hargaTotal;
         totalKeuntunganSparepart += keuntungan;
@@ -93,10 +93,12 @@ export const createServiceHP = async (data, user) => {
               connect: { id: idMember },
             },
           }),
-
+          User: {
+            connect: { id: user.id },
+          },
           Sparepart: {
             create: sparepartItems.map((item) => ({
-              Sparepart: {
+              Produk: {
                 connect: { id: item.idSparepart },
               },
               quantity: item.quantity,
@@ -109,7 +111,7 @@ export const createServiceHP = async (data, user) => {
       });
 
       for (const item of sparepartItems) {
-        await tx.sparePart.update({
+        await tx.produk.update({
           where: { id: item.idSparepart },
           data: {
             stok: { decrement: item.quantity },
@@ -177,54 +179,85 @@ export const updateServiceHPStatus = async (id, status, user) => {
 export const deleteServiceHP = async (id, user) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      const service = await tx.serviceHP.findUnique({
-        where: { id },
+      // =========================
+      // GET SERVICE
+      // =========================
+      const service = await tx.serviceHP.findFirst({
+        where: {
+          id,
+          idToko: user.toko_id,
+          deletedAt: null, // 🔥 penting
+        },
         include: {
-          Sparepart: true,
+          Sparepart: {
+            where: {
+              deletedAt: null, // 🔥 biar ga double
+            },
+          },
         },
       });
 
       if (!service) {
-        throw new Error("Service tidak ditemukan");
+        throw new Error("Service tidak ditemukan / sudah dihapus");
       }
 
+      // =========================
+      // BALIKIN STOK PRODUK
+      // =========================
       for (const item of service.Sparepart) {
-        await tx.sparePart.update({
-          where: { id: item.idSparepart },
+        await tx.produk.update({
+          where: { id: item.idProduk }, // ✅ FIX
           data: {
-            stok: { increment: item.quantity },
+            stok: {
+              increment: item.quantity,
+            },
           },
         });
       }
 
       const now = new Date();
 
+      // =========================
+      // SOFT DELETE SPAREPART
+      // =========================
       await tx.sparepartServiceHP.updateMany({
-        where: { idServiceHP: id },
+        where: {
+          idServiceHP: id,
+          deletedAt: null, // 🔥 biar ga ke update lagi
+        },
         data: { deletedAt: now },
       });
 
+      // =========================
+      // SOFT DELETE SERVICE
+      // =========================
       await tx.serviceHP.update({
         where: { id },
         data: { deletedAt: now },
       });
 
+      // =========================
+      // LOGGING
+      // =========================
       await createLog(
         {
           kategori: "Service HP",
           keterangan: `${user.nama} menghapus service ${service.keterangan}`,
-          nominal: service.keuntungan,
+          nominal: service.keuntungan || 0,
           nama: user.nama,
           idToko: user.toko_id,
         },
         tx
       );
 
-      return { success: true };
+      return {
+        success: true,
+        message: "Service berhasil dihapus",
+      };
     });
   } catch (error) {
     console.error("Error deleteServiceHP:", error);
-    throw new Error("Gagal menghapus service HP");
+    throw new Error(error.message || "Gagal menghapus service HP");
   }
 };
 // ✅ GET ALL dengan filter & pagination

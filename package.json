@@ -11,6 +11,10 @@
   "author": "Muhamad Gempar Anzalas",
   "license": "ISC",
   "description": "",
+  "engines": {
+    "node": "20.x",
+    "npm": "10.x"
+  },
   "dependencies": {
     "@prisma/client": "^6.6.0",
     "bcrypt": "^6.0.0",

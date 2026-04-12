@@ -3,6 +3,7 @@
 import {
   getKeuntunganChartData,
   getKeuntunganChartDataFromTable,
+  getKeuntunganDashboard,
   getKeuntunganService,
 } from "../service/keuntunganService.js";
 
@@ -70,3 +71,48 @@ export const getKeuntunganController = async (req, res) => {
 };
 
 // Route
+
+export const getKeuntunganDashboardController = async (req, res) => {
+  try {
+    const { periode = "mingguan", startDate, endDate } = req.query;
+
+    const idToko = req.user?.toko_id; // 🔥 ambil dari auth middleware
+
+    if (!idToko) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: idToko tidak ditemukan",
+      });
+    }
+
+    // 🔥 VALIDASI CUSTOM DATE
+    if (periode === "custom") {
+      if (!startDate || !endDate) {
+        return res.status(400).json({
+          success: false,
+          message: "startDate dan endDate wajib diisi untuk custom range",
+        });
+      }
+    }
+
+    const data = await getKeuntunganDashboard({
+      idToko,
+      periode,
+      startDate,
+      endDate,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil mengambil data keuntungan dashboard",
+      data,
+    });
+  } catch (error) {
+    console.error("Controller Error getKeuntunganDashboard:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Terjadi kesalahan pada server",
+    });
+  }
+};

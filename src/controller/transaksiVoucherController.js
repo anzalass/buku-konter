@@ -1,169 +1,199 @@
 // src/controllers/transaksiGrosirController.js
 import {
-  createGrosirOrder,
-  deletePendingTransaksi,
-  getAllTransaksiGrosir,
-  getDetailTransaksiVoucherDownline,
-  getLaporanBarangKeluar,
-  updateTransaksiStatus,
+  createTransaksi,
+  deleteTransaksi,
+  getBarangKeluar,
+  getHistoryTransaksi,
+  getLaporanUser,
 } from "../service/transaksiVoucherService.js"; // Sesuaikan path
 
-// POST /api/transaksi/grosir
-export const createGrosirOrderHandler = async (req, res) => {
+export const getBarangKeluarController = async (req, res) => {
   try {
-    const { kodeDownline, items, tanggal, keuntungan } = req.body;
-    const penempatan = req.user.penempatan;
-    const idUser = req.user.id;
-
-    if (!kodeDownline) {
-      return res.status(400).json({ error: "Kode downline wajib diisi" });
-    }
-    if (!items || !Array.isArray(items)) {
-      return res.status(400).json({ error: "Items harus berupa array" });
-    }
-
-    const result = await createGrosirOrder(
-      {
-        kodeDownline,
-        items,
-        tanggal,
-        keuntungan,
-        penempatan,
-        idUser,
-      },
-      req.user
-    );
-    res.status(201).json(result);
-  } catch (error) {
-    console.error("Create grosir order error:", error);
-    res.status(400).json({ error: error.message });
-  }
-};
-
-export const createGrosirOrderHandler2 = async (req, res) => {
-  try {
-    const { kodeDownline, items, tanggal, keuntungan, penempatan } = req.body;
-
-    if (!kodeDownline) {
-      return res.status(400).json({ error: "Kode downline wajib diisi" });
-    }
-    if (!items || !Array.isArray(items)) {
-      return res.status(400).json({ error: "Items harus berupa array" });
-    }
-
-    const result = await createGrosirOrder({
-      kodeDownline,
-      items,
-      tanggal,
-      keuntungan,
-      penempatan,
-      status: "Pending",
-    });
-    res.status(201).json(result);
-  } catch (error) {
-    console.error("Create grosir order error:", error);
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// GET /api/transaksi/grosir
-export const getAllTransaksiGrosirHandler = async (req, res) => {
-  try {
-    const { page, pageSize, search, startDate, endDate, deletedFilter } =
-      req.query;
-    const result = await getAllTransaksiGrosir({
-      page,
-      pageSize,
-      search,
+    const {
+      periode = "harian",
       startDate,
       endDate,
-      idToko: req.user.toko_id,
-      deletedFilter,
+      kategori = "all",
+      sort = "desc",
+      search = "",
+    } = req.query;
+
+    const idToko = req.user?.toko_id;
+
+    if (!idToko) {
+      return res.status(400).json({
+        success: false,
+        message: "ID Toko tidak ditemukan",
+      });
+    }
+
+    const data = await getBarangKeluar({
+      idToko,
+      periode,
+      startDate,
+      endDate,
+      kategori,
+      sort,
+      search,
     });
-    res.json(result);
-  } catch (error) {
-    console.error("Get all transaksi error:", error);
-    res.status(400).json({ error: error.message });
-  }
-};
 
-export const detailTransaksiVoucherDownline = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const data = await getDetailTransaksiVoucherDownline(id, req.user);
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
+      message: "Berhasil ambil data barang keluar",
       data,
     });
   } catch (error) {
-    res.status(404).json({
+    console.error("ERROR CONTROLLER barang keluar:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Terjadi kesalahan server",
+    });
+  }
+};
+export const createTransaksiController = async (req, res) => {
+  try {
+    const user = req.user; // dari middleware auth
+    const { keranjang, idMember, type, namaPembeli, potonganHarga } = req.body;
+
+    // 🔥 VALIDASI BASIC
+    if (!keranjang || !Array.isArray(keranjang) || keranjang.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Keranjang kosong",
+      });
+    }
+
+    // validasi isi keranjang
+    for (const item of keranjang) {
+      if (!item.idProduk || !item.qty) {
+        return res.status(400).json({
+          success: false,
+          message: "Format keranjang tidak valid",
+        });
+      }
+    }
+
+    const transaksi = await createTransaksi({
+      keranjang,
+      idMember,
+      type,
+      user,
+      namaPembeli,
+      potonganHarga,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Transaksi berhasil",
+      data: transaksi,
+    });
+  } catch (error) {
+    console.error("Error createTransaksi:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Terjadi kesalahan server",
+    });
+  }
+};
+
+export const getHistoryTransaksiController = async (req, res) => {
+  try {
+    const { periode, startDate, endDate, kategori } = req.query;
+
+    const idToko = req.user?.toko_id;
+
+    // =========================
+    // VALIDASI BASIC
+    // =========================
+    if (!idToko) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized - idToko tidak ditemukan",
+      });
+    }
+
+    // =========================
+    // CALL SERVICE
+    // =========================
+    const data = await getHistoryTransaksi({
+      idToko,
+      periode,
+      startDate,
+      endDate,
+      kategori,
+    });
+
+    // =========================
+    // RESPONSE
+    // =========================
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil ambil data history",
+      ...data,
+    });
+  } catch (error) {
+    console.error("ERROR CONTROLLER getDashboardHistory:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Terjadi kesalahan server",
+    });
+  }
+};
+
+export const deleteTransaksiController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = req.user; // dari middleware auth
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "ID transaksi wajib diisi",
+      });
+    }
+
+    const result = await deleteTransaksi({ id, user });
+
+    return res.status(200).json({
+      success: true,
+      message: "Transaksi berhasil dibatalkan",
+      data: result,
+    });
+  } catch (error) {
+    console.error("❌ DELETE TRANSAKSI ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Terjadi kesalahan server",
+    });
+  }
+};
+
+export const getLaporanUserController = async (req, res) => {
+  try {
+    const { kategori, startDate, endDate } = req.query;
+    const idUser = req.params.id; // 🔥 dari middleware auth
+
+    const result = await getLaporanUser({
+      idUser,
+      kategori,
+      startDate,
+      endDate,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil ambil laporan user",
+      data: result.data,
+      summary: result.summary,
+    });
+  } catch (error) {
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
-  }
-};
-
-// PATCH /api/transaksi/grosir/:id/status
-export const updateTransaksiStatusHandler = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    console.log(status);
-
-    if (!status) {
-      return res.status(400).json({ error: "Status wajib diisi" });
-    }
-
-    await updateTransaksiStatus(id, status);
-    res.json({ success: true });
-  } catch (error) {
-    console.error("Update status error:", error);
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// DELETE /api/transaksi/grosir/:id
-export const deletePendingTransaksiHandler = async (req, res) => {
-  try {
-    const { id } = req.params;
-    await deletePendingTransaksi(id, req.user);
-    res.json({ success: true });
-  } catch (error) {
-    console.error("Delete transaksi error:", error);
-    res.status(400).json({ error: error.message });
-  }
-};
-
-export const getLaporanBarangKeluarHandler = async (req, res) => {
-  try {
-    const {
-      page,
-      pageSize,
-      filterPeriod,
-      startDate,
-      endDate,
-      searchNama,
-      sortQty,
-      brand,
-    } = req.query;
-
-    const result = await getLaporanBarangKeluar({
-      page,
-      pageSize,
-      filterPeriod,
-      startDate,
-      endDate,
-      searchNama,
-      sortQty,
-      brand,
-      idToko: req.user.toko_id,
-    });
-
-    res.json(result);
-  } catch (error) {
-    console.error("Laporan Barang Keluar Error:", error);
-    res.status(400).json({ error: error.message });
   }
 };

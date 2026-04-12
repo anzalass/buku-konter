@@ -1,16 +1,16 @@
 // src/handlers/uangModal.handler.js
 import {
-  getAllUangModal,
-  createUangModal,
-  updateUangModal,
-  deleteUangModal,
+  getAlluangKeluar,
+  createuangKeluar,
+  updateuangKeluar,
+  deleteuangKeluar,
 } from "../service/uangModalService.js";
 
 // GET /api/uang-modal
 export const getAllUangModalHandler = async (req, res) => {
   try {
     const { page, pageSize, search, startDate, endDate } = req.query;
-    const result = await getAllUangModal({
+    const result = await getAlluangKeluar({
       page,
       pageSize,
       search,
@@ -31,7 +31,7 @@ export const createUangModalHandler = async (req, res) => {
     const { keterangan, tanggal, jumlah } = req.body;
     const penempatan = req.user.penempatan;
     const idUser = req.user.id;
-    const result = await createUangModal({
+    const result = await createuangKeluar({
       keterangan,
       tanggal,
       jumlah,
@@ -50,7 +50,7 @@ export const createUangModalHandler = async (req, res) => {
 export const updateUangModalHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await updateUangModal(id, req.body, req.user);
+    const result = await updateuangKeluar(id, req.body, req.user);
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -61,7 +61,7 @@ export const updateUangModalHandler = async (req, res) => {
 export const deleteUangModalHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    await deleteUangModal(id, req.user);
+    await deleteuangKeluar(id, req.user);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });

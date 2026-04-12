@@ -1,41 +1,41 @@
 import { getAllLogs } from "../service/logService.js";
 
-export const getAllLogsHandler = async (req, res) => {
+export const getLogsController = async (req, res) => {
   try {
+    const idToko = req.user.toko_id;
+
     const {
-      page = 1,
-      pageSize = 10,
-      search,
-      kategori,
-      nama,
+      nama = "",
+      kategori = "all",
+      keterangan = "",
       startDate,
       endDate,
-      minNominal,
-      maxNominal,
+      page = 1,
+      pageSize = 10,
     } = req.query;
 
     const result = await getAllLogs({
-      page,
-      pageSize,
-      search,
-      kategori,
+      idToko,
       nama,
+      kategori,
+      keterangan,
       startDate,
       endDate,
-      minNominal,
-      maxNominal,
-      idToko: req.user.toko_id, // 🔥 ambil dari user login
+      page: Number(page),
+      pageSize: Number(pageSize),
     });
 
-    return res.json({
+    return res.status(200).json({
       success: true,
-      data: result,
+      message: "Berhasil mengambil data log",
+      ...result,
     });
   } catch (error) {
-    console.error("GET_LOGS_ERROR:", error);
-    return res.status(400).json({
+    console.error("ERROR getLogsController:", error);
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Terjadi kesalahan server",
     });
   }
 };

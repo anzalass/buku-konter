@@ -24,7 +24,6 @@ model Toko {
     User User[]
     Produk Produk[]
     Member Member[]
-    Downline Downline[]
     Pengeluaran UangKeluar[]
     ServiceHP ServiceHP[]
     SparepartServiceHP SparepartServiceHP[]
@@ -71,7 +70,11 @@ model User {
     createdAt DateTime? @default(now())
     updatedAt DateTime? @updatedAt
     idToko String
-    isActive Boolean @default(true)   // ✅ TAMBAHAN
+    isActive Boolean @default(true)  
+     TransaksiVoucher TransaksiVoucherHarian[]
+     Transaksi Transaksi[]
+     JualanHarian JualanHarian[]
+     ServiceHP ServiceHP[]
     Toko          Toko @relation(fields: [idToko], references: [id])
 
 }
@@ -104,8 +107,6 @@ model DataMember {
 
 }
 
-
-
 model Produk {
   id String @id @default(uuid())
   nama String
@@ -128,9 +129,9 @@ model Produk {
   isActive Boolean @default(true)   // ✅ TAMBAHAN
 }
 
-
 model TransaksiVoucherHarian {
   id String @id @default(uuid())
+  idUser String?
   idProduk String
   idMember String?
   keuntungan Int
@@ -141,14 +142,17 @@ model TransaksiVoucherHarian {
   idToko String
   Toko          Toko @relation(fields: [idToko], references: [id])
   Member        Member? @relation(fields: [idMember], references: [id])
+    User          User? @relation(fields: [idUser], references: [id])
 
 }
 
 model Transaksi {
   id String @id @default(uuid())
+  idUser String?
   namaPembeli String?
   totalHarga Int
   tanggal DateTime
+  type String
   keuntungan Int?
   status String
   createdAt DateTime? @default(now())
@@ -159,7 +163,52 @@ model Transaksi {
   Member          Member? @relation(fields: [idMember], references: [id])
   idToko String
   Toko          Toko @relation(fields: [idToko], references: [id])
+  User          User? @relation(fields: [idUser], references: [id])
+
 }
+
+
+
+model JualanHarian {
+      id String @id @default(uuid())
+      idUser String?
+      kategori String
+      nominal Int?
+      tanggal DateTime
+      createdAt DateTime? @default(now())
+      updatedAt DateTime? @updatedAt
+      deletedAt DateTime?
+      idMember String?
+      Member          Member? @relation(fields: [idMember], references: [id])
+      idToko String
+      User          User? @relation(fields: [idUser], references: [id])
+      Toko          Toko @relation(fields: [idToko], references: [id])
+}
+
+
+model ServiceHP {
+  id String @id @default(uuid())
+  idUser String?
+  brandHP String 
+  keterangan String
+  tanggal DateTime
+  namaPelangan String?
+  status String
+  hargaSparePart Int?
+  noHP String
+  biayaJasa Int
+  keuntungan Int
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  deletedAt DateTime?
+  Sparepart SparepartServiceHP[]
+  idMember String?
+  Member          Member? @relation(fields: [idMember], references: [id])
+  idToko String
+  User          User? @relation(fields: [idUser], references: [id])
+  Toko          Toko @relation(fields: [idToko], references: [id])
+}
+
 
 model ItemsTransaksi {
   id String @id @default(uuid())
@@ -177,38 +226,6 @@ model ItemsTransaksi {
 
 }
 
-model UangKeluar {
-  id String @id @default(uuid())
-  keterangan String
-  tanggal DateTime
-  jumlah Int
-  createdAt DateTime? @default(now())
-  updatedAt DateTime? @updatedAt
-  idToko String
-  Toko          Toko @relation(fields: [idToko], references: [id])
-
-}
-
-model ServiceHP {
-  id String @id @default(uuid())
-  brandHP String 
-  keterangan String
-  tanggal DateTime
-  namaPelangan String?
-  status String
-  hargaSparePart Int?
-  noHP String
-  biayaJasa Int
-  keuntungan Int
-  createdAt DateTime? @default(now())
-  updatedAt DateTime? @updatedAt
-  deletedAt DateTime?
-  Sparepart SparepartServiceHP[]
-  idMember String?
-  Member          Member? @relation(fields: [idMember], references: [id])
-  idToko String
-  Toko          Toko @relation(fields: [idToko], references: [id])
-}
 
 model SparepartServiceHP {
     id String @id @default(uuid())
@@ -225,6 +242,18 @@ model SparepartServiceHP {
     Toko          Toko @relation(fields: [idToko], references: [id])
 }
 
+model UangKeluar {
+  id String @id @default(uuid())
+  keterangan String
+  tanggal DateTime
+  jumlah Int
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  idToko String
+  Toko          Toko @relation(fields: [idToko], references: [id])
+
+}
+
 
 model Log {
     id String @id @default(uuid())
@@ -239,19 +268,5 @@ model Log {
 
 }
 
-
-model JualanHarian {
-      id String @id @default(uuid())
-      kategori String
-      nominal Int?
-      tanggal DateTime
-      createdAt DateTime? @default(now())
-      updatedAt DateTime? @updatedAt
-      deletedAt DateTime?
-      idMember String?
-      Member          Member? @relation(fields: [idMember], references: [id])
-      idToko String
-      Toko          Toko @relation(fields: [idToko], references: [id])
-}
 
 

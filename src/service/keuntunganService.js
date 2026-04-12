@@ -601,3 +601,155 @@ export const getKeuntunganService = async ({
     },
   });
 };
+
+export const getKeuntunganDashboard = async ({
+  idToko,
+  periode = "mingguan",
+  startDate,
+  endDate,
+}) => {
+  try {
+    // ===============================
+    // 1️⃣ HITUNG RANGE TANGGAL
+    // ===============================
+    const now = new Date();
+    let start;
+    let end = new Date();
+
+    switch (periode) {
+      case "harian":
+        start = new Date(now);
+        start.setDate(start.getDate() - 6);
+        break;
+
+      case "mingguan":
+        start = new Date(now);
+        start.setDate(start.getDate() - 28);
+        break;
+
+      case "bulanan":
+        start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+        break;
+
+      case "custom":
+        start = new Date(startDate);
+        end = new Date(endDate);
+        break;
+
+      default:
+        start = new Date(now);
+        start.setDate(start.getDate() - 6);
+    }
+
+    // ===============================
+    // 2️⃣ HELPER FORMAT TANGGAL
+    // ===============================
+    const formatDate = (date) => {
+      if (periode === "bulanan") {
+        return date.toLocaleDateString("id-ID", {
+          month: "short",
+        });
+      }
+
+      return date.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+      });
+    };
+
+    // ===============================
+    // 3️⃣ QUERY GROUP BY (🔥 CORE)
+    // ===============================
+
+    const [service, transaksi, jualan, voucher] = await Promise.all([
+      // 🔧 SERVICE
+      prisma.serviceHP.groupBy({
+        by: ["tanggal"],
+        where: {
+          idToko,
+          deletedAt: null,
+          status: "Selesai",
+          tanggal: { gte: start, lte: end },
+        },
+        _sum: { keuntungan: true },
+      }),
+
+      // 🛒 TRANSAKSI (AKSESORIS / SPAREPART / HP)
+      prisma.transaksi.groupBy({
+        by: ["tanggal"],
+        where: {
+          idToko,
+          deletedAt: null,
+          tanggal: { gte: start, lte: end },
+        },
+        _sum: { keuntungan: true },
+      }),
+
+      // 💸 JUALAN HARIAN
+      prisma.jualanHarian.groupBy({
+        by: ["tanggal"],
+        where: {
+          idToko,
+          deletedAt: null,
+          tanggal: { gte: start, lte: end },
+        },
+        _sum: { nominal: true },
+      }),
+
+      // 🎟️ VOUCHER
+      prisma.transaksiVoucherHarian.groupBy({
+        by: ["createdAt"],
+        where: {
+          idToko,
+          deletedAt: null,
+          createdAt: { gte: start, lte: end },
+        },
+        _sum: { keuntungan: true },
+      }),
+    ]);
+
+    // ===============================
+    // 4️⃣ NORMALIZE KE MAP
+    // ===============================
+    const mapData = (data, field, isVoucher = false) => {
+      const map = {};
+
+      data.forEach((item) => {
+        const dateKey = new Date(
+          isVoucher ? item.createdAt : item.tanggal
+        ).toDateString();
+
+        map[dateKey] = item._sum[field] || 0;
+      });
+
+      return map;
+    };
+
+    const serviceMap = mapData(service, "keuntungan");
+    const transaksiMap = mapData(transaksi, "keuntungan");
+    const jualanMap = mapData(jualan, "nominal");
+    const voucherMap = mapData(voucher, "keuntungan", true);
+
+    // ===============================
+    // 5️⃣ GENERATE SEMUA TANGGAL
+    // ===============================
+    const result = [];
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = new Date(d).toDateString();
+
+      result.push({
+        tanggal: formatDate(d),
+        keuntunganService: serviceMap[key] || 0,
+        penjualan: transaksiMap[key] || 0,
+        jualanHarian: jualanMap[key] || 0,
+        voucherHarian: voucherMap[key] || 0,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Error getKeuntunganDashboard:", error);
+    throw error;
+  }
+};

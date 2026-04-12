@@ -1,634 +1,767 @@
 import { PrismaClient } from "@prisma/client";
 import { createLog } from "./logService.js";
-import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
+import { getDateRange } from "./historyService.js";
 const prisma = new PrismaClient();
 
-// src/services/grosir.service.js
-export const createGrosirOrder = async (
-  { kodeDownline, items, tanggal, keuntungan, idUser, penempatan, status },
-  user
-) => {
-  try {
-    if (!kodeDownline) throw new Error("Kode downline wajib diisi");
+export const getBarangKeluar = async ({
+  idToko,
+  periode = "harian",
+  startDate,
+  endDate,
+  kategori = "all",
+  sort = "desc",
+  search = "",
+}) => {
+  console.log(kategori);
 
-    if (!Array.isArray(items) || items.length === 0) {
-      throw new Error("Pesanan tidak boleh kosong");
+  try {
+    const dateFilter = getDateRange({ periode, startDate, endDate });
+
+    // =========================
+    // 1. PENJUALAN
+    // =========================
+    const penjualan = await prisma.itemsTransaksi.groupBy({
+      by: ["idProduk"],
+      where: {
+        idToko,
+        createdAt: dateFilter,
+        deletedAt: null,
+        Produk: {
+          ...(kategori !== "all" && {
+            kategori: {
+              equals: kategori,
+              mode: "insensitive",
+            },
+          }),
+          ...(search && {
+            nama: { contains: search, mode: "insensitive" },
+          }),
+        },
+      },
+      _sum: {
+        quantity: true,
+      },
+    });
+
+    // =========================
+    // 2. SERVICE
+    // =========================
+    const service = await prisma.sparepartServiceHP.groupBy({
+      by: ["idProduk"],
+      where: {
+        idToko,
+        createdAt: dateFilter,
+        deletedAt: null,
+        Produk: {
+          ...(kategori !== "all" && {
+            kategori: {
+              equals: kategori,
+              mode: "insensitive",
+            },
+          }),
+          ...(search && {
+            nama: { contains: search, mode: "insensitive" },
+          }),
+        },
+      },
+      _sum: {
+        quantity: true,
+      },
+    });
+
+    // =========================
+    // 3. VOUCHER HARIAN 🔥
+    // =========================
+    const voucher = await prisma.transaksiVoucherHarian.groupBy({
+      by: ["idProduk"],
+      where: {
+        idToko,
+        createdAt: dateFilter,
+        deletedAt: null,
+        Produk: {
+          ...(kategori !== "all" && {
+            kategori: {
+              equals: kategori,
+              mode: "insensitive",
+            },
+          }),
+          ...(search && {
+            nama: { contains: search, mode: "insensitive" },
+          }),
+        },
+      },
+      _count: {
+        id: true, // karena ga ada qty
+      },
+    });
+
+    // =========================
+    // 4. MERGE SEMUA
+    // =========================
+    const map = {};
+
+    const addToMap = (arr, type = "qty") => {
+      arr.forEach((item) => {
+        if (!map[item.idProduk]) {
+          map[item.idProduk] = 0;
+        }
+
+        if (type === "qty") {
+          map[item.idProduk] += item._sum?.quantity || 0;
+        }
+
+        if (type === "count") {
+          map[item.idProduk] += item._count?.id || 0;
+        }
+      });
+    };
+
+    addToMap(penjualan, "qty");
+    addToMap(service, "qty");
+    addToMap(voucher, "count"); // 🔥 penting
+
+    // =========================
+    // 5. AMBIL DETAIL PRODUK
+    // =========================
+    const produkIds = Object.keys(map);
+
+    if (produkIds.length === 0) return [];
+
+    const produk = await prisma.produk.findMany({
+      where: {
+        id: { in: produkIds },
+      },
+      select: {
+        id: true,
+        nama: true,
+        kategori: true,
+        brand: true,
+      },
+    });
+
+    // =========================
+    // 6. FORMAT RESULT
+    // =========================
+    const result = produk.map((p) => ({
+      id: p.id,
+      nama: p.nama,
+      kategori: p.kategori,
+      brand: p.brand,
+      totalKeluar: map[p.id] || 0,
+    }));
+
+    // =========================
+    // 7. SORTING
+    // =========================
+    result.sort((a, b) =>
+      sort === "asc"
+        ? a.totalKeluar - b.totalKeluar
+        : b.totalKeluar - a.totalKeluar
+    );
+
+    return result;
+  } catch (error) {
+    console.error("ERROR getBarangKeluar:", error);
+    throw new Error("Gagal mengambil data barang keluar");
+  }
+};
+export const createTransaksi = async ({
+  keranjang,
+  idMember,
+  type,
+  user,
+  namaPembeli,
+  potonganHarga,
+}) => {
+  if (!keranjang || keranjang.length === 0) {
+    throw new Error("Keranjang kosong");
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    let totalHarga = 0;
+    let totalKeuntungan = 0;
+
+    const produkList = await tx.produk.findMany({
+      where: {
+        id: { in: keranjang.map((k) => k.idProduk) },
+        idToko: user.toko_id,
+        isActive: true,
+      },
+    });
+
+    const produkMap = new Map(produkList.map((p) => [p.id, p]));
+
+    for (const item of keranjang) {
+      const produk = produkMap.get(item.idProduk);
+
+      if (!produk) throw new Error("Produk tidak ditemukan");
+
+      if (produk.stok < item.qty) {
+        throw new Error(`Stok ${produk.nama} tidak cukup. Sisa ${produk.stok}`);
+      }
+
+      const hargaJual =
+        type === "grosir"
+          ? produk.hargaGrosir ?? produk.hargaEceran
+          : produk.hargaEceran;
+
+      totalHarga += hargaJual * item.qty;
+      totalKeuntungan += (hargaJual - produk.hargaModal) * item.qty;
     }
 
-    return await prisma.$transaction(async (tx) => {
-      const downline = await tx.downline.findUnique({
-        where: { kodeDownline },
-      });
-
-      if (!downline) {
-        throw new Error(`Downline dengan kode ${kodeDownline} tidak ditemukan`);
-      }
-
-      let totalHarga = 0;
-      const itemsToCreate = [];
-
-      for (const item of items) {
-        const { idVoucher, quantity } = item;
-
-        if (!idVoucher || !quantity || quantity <= 0) {
-          throw new Error(
-            "Item pesanan tidak valid: idVoucher dan quantity wajib"
-          );
-        }
-
-        const voucher = await tx.voucher.findUnique({
-          where: { id: idVoucher },
-          select: {
-            id: true,
-            nama: true,
-            brand: true,
-            stok: true,
-            hargaJual: true,
+    const transaksi = await tx.transaksi.create({
+      data: {
+        namaPembeli: namaPembeli ? namaPembeli : null,
+        totalHarga,
+        User: {
+          connect: {
+            id: user.id,
           },
-        });
+        },
+        type: type,
+        keuntungan: parseInt(totalKeuntungan) - parseInt(potonganHarga),
+        status: "selesai",
+        tanggal: new Date(),
 
-        if (!voucher) {
-          throw new Error(`Voucher dengan ID ${idVoucher} tidak ditemukan`);
-        }
-
-        if (voucher.stok < quantity) {
-          throw new Error(
-            `Stok ${voucher.brand} ${voucher.nama} tidak mencukupi`
-          );
-        }
-
-        totalHarga += voucher.hargaJual * quantity;
-
-        itemsToCreate.push({
-          idVoucher: voucher.id,
-          quantity,
-        });
-      }
-
-      const transaksi = await tx.transaksiVoucherDownline.create({
-        data: {
-          downline: {
-            connect: { kodeDownline },
+        ...(idMember && {
+          Member: {
+            connect: { id: idMember },
           },
+        }),
 
-          totalHarga,
+        Toko: {
+          connect: { id: user.toko_id },
+        },
 
-          Toko: {
-            connect: { id: user.toko_id },
-          },
+        items: {
+          create: keranjang.map((item) => {
+            const produk = produkMap.get(item.idProduk);
 
-          keuntungan,
+            const hargaJual =
+              type === "grosir"
+                ? produk.hargaGrosir ?? produk.hargaEceran
+                : produk.hargaEceran;
 
-          tanggal: new Date(`${tanggal}T00:00:00Z`),
-
-          status: status || "Selesai",
-
-          items: {
-            create: itemsToCreate.map((item) => ({
-              quantity: item.quantity,
-
+            return {
+              quantity: item.qty,
               tanggal: new Date(),
 
+              Produk: {
+                connect: { id: item.idProduk },
+              },
               Toko: {
                 connect: { id: user.toko_id },
               },
-
-              Voucher: {
-                connect: { id: item.idVoucher },
-              },
-            })),
-          },
+            };
+          }),
         },
-      });
-
-      await Promise.all(
-        itemsToCreate.map((item) =>
-          tx.voucher.update({
-            where: { id: item.idVoucher },
-            data: {
-              stok: { decrement: item.quantity },
-            },
-          })
-        )
-      );
-
-      // 🔥 CREATE LOG
-      await createLog(
-        {
-          kategori: "Transaksi Voucher Downline",
-          keterangan: `${user.nama} membuat transaksi grosir untuk downline ${kodeDownline}`,
-          nominal: keuntungan,
-          nama: user.nama,
-          idToko: user.toko_id,
-        },
-        tx
-      );
-
-      return {
-        id: transaksi.id,
-        kodeDownline,
-        totalHarga,
-        items: itemsToCreate.length,
-        tanggal: transaksi.tanggal,
-      };
+      },
+      include: {
+        items: true,
+      },
     });
-  } catch (error) {
-    console.error("Error createGrosirOrder:", error);
 
-    throw new Error(
-      error.message || "Terjadi kesalahan saat membuat transaksi grosir"
-    );
-  }
-};
+    await Promise.all(
+      keranjang.map((item) => {
+        const produk = produkMap.get(item.idProduk);
 
-export const deleteTransaksi = async (idTransaksi, user) => {
-  try {
-    if (!idTransaksi) {
-      throw new Error("ID transaksi wajib diisi");
-    }
-
-    return await prisma.$transaction(async (tx) => {
-      const transaksi = await tx.transaksiVoucherDownline.findUnique({
-        where: { id: idTransaksi },
-        include: {
-          items: {
-            include: {
-              Voucher: {
-                select: { id: true },
-              },
-            },
-          },
-        },
-      });
-
-      if (!transaksi) {
-        throw new Error("Transaksi tidak ditemukan");
-      }
-
-      for (const item of transaksi.items) {
-        await tx.voucher.update({
-          where: { id: item.Voucher.id },
+        return tx.produk.update({
+          where: { id: produk.id },
           data: {
-            stok: { increment: item.quantity },
+            stok: { decrement: item.qty },
+            terjual: { increment: item.qty },
           },
         });
-      }
-
-      const now = new Date();
-
-      await tx.itemsTransaksiVoucherDownline.updateMany({
-        where: { idTransaksi: transaksi.id },
-        data: {
-          deletedAt: now,
-        },
-      });
-
-      await tx.transaksiVoucherDownline.update({
-        where: { id: transaksi.id },
-        data: {
-          deletedAt: now,
-        },
-      });
-
-      await createLog(
-        {
-          kategori: "Transaksi Voucher Downline",
-          keterangan: `${user.nama} menghapus transaksi voucher downline`,
-          nominal: transaksi.keuntungan,
-          nama: user.nama,
-          idToko: user.toko_id,
-        },
-        tx
-      );
-
-      return {
-        success: true,
-        message: "Transaksi berhasil dihapus dan stok dikembalikan",
-      };
-    });
-  } catch (error) {
-    console.error("Error deleteTransaksi:", error);
-
-    throw new Error(
-      error.message || "Terjadi kesalahan saat menghapus transaksi"
+      })
     );
-  }
-};
 
-export const deletePendingTransaksi = async (idTransaksi, user) => {
-  try {
-    if (!idTransaksi) {
-      throw new Error("ID transaksi wajib diisi");
-    }
-
-    return await prisma.$transaction(async (tx) => {
-      const transaksi = await tx.transaksiVoucherDownline.findUnique({
-        where: { id: idTransaksi },
-        include: {
-          items: {
-            include: {
-              Voucher: {
-                select: { id: true },
-              },
-            },
-          },
-        },
-      });
-
-      if (!transaksi) {
-        throw new Error("Transaksi tidak ditemukan");
-      }
-
-      if (transaksi.status !== "Proses" && transaksi.status !== "Pending") {
-        throw new Error(
-          "Hanya transaksi dengan status 'Pending' atau 'Proses' yang bisa dihapus"
-        );
-      }
-
-      for (const item of transaksi.items) {
-        await tx.voucher.update({
-          where: { id: item.Voucher.id },
-          data: {
-            stok: { increment: item.quantity },
-          },
-        });
-      }
-
-      const now = new Date();
-
-      await tx.itemsTransaksiVoucherDownline.updateMany({
-        where: { idTransaksi: transaksi.id },
-        data: {
-          deletedAt: now,
-        },
-      });
-
-      await tx.transaksiVoucherDownline.update({
-        where: { id: transaksi.id },
-        data: {
-          deletedAt: now,
-        },
-      });
-
-      await createLog(
-        {
-          kategori: "Transaksi Voucher Downline",
-          keterangan: `${user.nama} menghapus transaksi pending`,
-          nominal: transaksi.keuntungan,
-          nama: user.nama,
-          idToko: user.toko_id,
-        },
-        tx
-      );
-
-      return {
-        success: true,
-        message: "Transaksi berhasil dihapus dan stok dikembalikan",
-      };
-    });
-  } catch (error) {
-    console.error("Error deletePendingTransaksi:", error);
-
-    throw new Error(
-      error.message || "Terjadi kesalahan saat menghapus transaksi pending"
-    );
-  }
-};
-// src/services/transaksiGrosir.service.js
-
-// GET ALL with filter & pagination
-export const getAllTransaksiGrosir = async ({
-  page = 1,
-  pageSize = 10,
-  search = "", // kodeDownline
-  startDate,
-  endDate,
-  idToko,
-  deletedFilter = "active",
-}) => {
-  const skip = (Number(page) - 1) * Number(pageSize);
-  const take = Number(pageSize);
-
-  const where = {};
-  where.idToko = idToko;
-  if (deletedFilter === "active") {
-    where.deletedAt = null;
-  } else if (deletedFilter === "deleted") {
-    where.deletedAt = { not: null };
-  }
-  // Filter kodeDownline
-  if (search) {
-    where.OR = [
+    // 🔥 CREATE LOG
+    await createLog(
       {
-        downline: {
-          nama: { contains: search, mode: "insensitive" },
-        },
+        kategori: "Penjualan",
+        keterangan: `${user.nama} membuat transaksi`,
+        nominal: transaksi.keuntungan,
+        nama: user.nama,
+        idToko: user.toko_id,
       },
-      {
-        kodeDownline: { contains: search, mode: "insensitive" },
-      },
-    ];
-  }
-
-  // Filter tanggal
-  if (startDate || endDate) {
-    const range = toUTCFromWIBRange(startDate, endDate);
-
-    where.createdAt = {};
-    if (range.gte) where.createdAt.gte = range.gte;
-    if (range.lte) where.createdAt.lte = range.lte;
-  }
-
-  const [data, total] = await prisma.$transaction([
-    prisma.transaksiVoucherDownline.findMany({
-      where,
-      // skip,
-      // take,
-      orderBy: { tanggal: "desc" },
-      include: {
-        items: {
-          include: {
-            Voucher: {
-              select: {
-                nama: true,
-                brand: true,
-                hargaPokok: true,
-                hargaJual: true,
-              },
-            },
-          },
-        },
-        downline: {
-          select: { nama: true, kodeDownline: true },
-        },
-      },
-    }),
-    prisma.transaksiVoucherDownline.count({ where }),
-  ]);
-
-  // Format ke frontend
-  const formatted = data.map((trx) => {
-    const totalKeuntungan = trx.items.reduce((sum, item) => {
-      const pokok = item.Voucher.hargaPokok || 0;
-      const jual = item.Voucher.hargaJual || 0;
-      return sum + item.quantity * (jual - pokok);
-    }, 0);
-
-    return {
-      id: trx.id,
-      kodeDownline: trx.kodeDownline,
-      downline: trx.downline,
-      totalHarga: trx.totalHarga,
-      tanggal: trx.createdAt,
-      status: trx.status,
-      keuntungan: trx.keuntungan,
-      detail: {
-        itemTransaksi: trx.items.map((item) => ({
-          id: item.id,
-          namaProduk: `${item.Voucher.brand} ${item.Voucher.nama}`,
-          qty: item.quantity,
-          hargaJual: item.Voucher.hargaJual || 0,
-          totalHarga: Number(item.quantity * item.Voucher.hargaJual),
-          hargaPokok: item.Voucher.hargaPokok || 0,
-        })),
-      },
-    };
-  });
-
-  return {
-    data: formatted,
-    meta: {
-      page: Number(page),
-      pageSize: take,
-      total,
-      totalPages: Math.ceil(total / take),
-    },
-  };
-};
-
-// UPDATE STATUS
-export const updateTransaksiStatus = async (id, status) => {
-  const allowedStatus = ["Pending", "Proses", "Selesai", "Gagal"];
-  if (!allowedStatus.includes(status)) {
-    throw new Error("Status tidak valid");
-  }
-
-  return await prisma.transaksiVoucherDownline.update({
-    where: { id },
-    data: { status },
-  });
-};
-
-// DELETE (hanya jika status = "Pending")
-
-const getDateRange = (period, startDate, endDate) => {
-  const offset = 7 * 60 * 60 * 1000;
-
-  const now = new Date();
-  const nowWIB = new Date(now.getTime() + offset);
-
-  let start;
-  let end;
-
-  if (period === "today") {
-    start = new Date(nowWIB);
-    start.setHours(0, 0, 0, 0);
-
-    end = new Date(nowWIB);
-    end.setHours(23, 59, 59, 999);
-  }
-
-  if (period === "week") {
-    const day = nowWIB.getDay() || 7;
-
-    start = new Date(nowWIB);
-    start.setDate(nowWIB.getDate() - day + 1);
-    start.setHours(0, 0, 0, 0);
-
-    end = new Date(nowWIB);
-    end.setHours(23, 59, 59, 999);
-  }
-
-  if (period === "month") {
-    start = new Date(nowWIB.getFullYear(), nowWIB.getMonth(), 1);
-    start.setHours(0, 0, 0, 0);
-
-    end = new Date(nowWIB);
-    end.setHours(23, 59, 59, 999);
-  }
-
-  if (period === "custom" && startDate && endDate) {
-    start = new Date(`${startDate}T00:00:00`);
-    end = new Date(`${endDate}T23:59:59.999`);
-  }
-
-  if (!start || !end) {
-    start = new Date("1970-01-01");
-    end = nowWIB;
-  }
-
-  return {
-    start: new Date(start.getTime() - offset),
-    end: new Date(end.getTime() - offset),
-  };
-};
-
-export const getLaporanBarangKeluar = async ({
-  page = 1,
-  pageSize = 10,
-  filterPeriod = "all",
-  startDate,
-  endDate,
-  searchNama = "",
-  brand = "", // ✅ TAMBAH BRAND
-  sortQty = "none",
-  idToko,
-}) => {
-  const skip = (Number(page) - 1) * Number(pageSize);
-  const take = Number(pageSize);
-
-  // Tentukan rentang tanggal
-  const { start, end } = getDateRange(filterPeriod, startDate, endDate);
-
-  // =========================
-  // WHERE CONDITION
-  // =========================
-  const whereItems = {
-    tanggal: {
-      gte: start,
-      lte: end,
-    },
-    idToko: idToko,
-    deletedAt: null,
-    Voucher: {
-      ...(searchNama && {
-        nama: { contains: searchNama, mode: "insensitive" },
-      }),
-      ...(brand && {
-        brand: brand, // ✅ FILTER BRAND
-      }),
-    },
-  };
-
-  // =========================
-  // FETCH DATA
-  // =========================
-  const allItems = await prisma.itemsTransaksiVoucherDownline.findMany({
-    where: whereItems,
-    orderBy: { tanggal: "desc" },
-    include: {
-      Voucher: {
-        select: {
-          nama: true,
-          brand: true,
-          hargaPokok: true,
-          hargaJual: true,
-        },
-      },
-      transaksi: {
-        select: { tanggal: true },
-      },
-    },
-  });
-
-  // =========================
-  // GROUP BY NAMA BARANG
-  // =========================
-  const groupedItems = allItems.reduce((acc, item) => {
-    const key = item.Voucher.nama;
-
-    if (!acc[key]) {
-      acc[key] = {
-        id: key,
-        namaBarang: item.Voucher.nama,
-        merk: item.Voucher.brand,
-        hargaModal: item.Voucher.hargaPokok,
-        hargaJual: item.Voucher.hargaJual,
-        qty: 0,
-        modal: 0,
-        keuntungan: 0,
-        tanggalTerakhir: item.tanggal || item.transaksi?.tanggal,
-      };
-    }
-
-    acc[key].qty += item.quantity;
-    acc[key].modal += item.quantity * item.Voucher.hargaPokok;
-    acc[key].keuntungan +=
-      item.quantity * item.Voucher.hargaJual -
-      item.quantity * item.Voucher.hargaPokok;
-
-    const itemDate = item.tanggal || item.transaksi?.tanggal;
-    if (itemDate > acc[key].tanggalTerakhir) {
-      acc[key].tanggalTerakhir = itemDate;
-    }
-
-    return acc;
-  }, {});
-
-  let resultArray = Object.values(groupedItems);
-
-  // =========================
-  // SORTING
-  // =========================
-  if (sortQty === "desc") {
-    resultArray.sort((a, b) => b.qty - a.qty);
-  } else if (sortQty === "asc") {
-    resultArray.sort((a, b) => a.qty - b.qty);
-  } else {
-    resultArray.sort(
-      (a, b) => new Date(b.tanggalTerakhir) - new Date(a.tanggalTerakhir)
+      tx
     );
-  }
 
-  // =========================
-  // PAGINATION
-  // =========================
-  const totalCount = resultArray.length;
-  const paginatedData = resultArray.slice(skip, skip + take);
-
-  return {
-    paginatedData,
-    meta: {
-      page: Number(page),
-      pageSize: take,
-      total: totalCount,
-      totalPages: Math.ceil(totalCount / take),
-    },
-  };
+    return transaksi;
+  });
 };
 
-export const getDetailTransaksiVoucherDownline = async (id, user) => {
-  try {
-    const transaksi = await prisma.transaksiVoucherDownline.findUnique({
-      where: { id },
+export const deleteTransaksi = async ({ id, user }) => {
+  return await prisma.$transaction(async (tx) => {
+    // 1. Ambil transaksi + items
+    const transaksi = await tx.transaksi.findFirst({
+      where: {
+        id,
+        idToko: user.toko_id,
+        deletedAt: null,
+      },
       include: {
-        downline: true,
-        items: {
-          include: {
-            Voucher: true,
-          },
-        },
+        items: true,
       },
     });
 
     if (!transaksi) {
-      throw new Error("Transaksi tidak ditemukan");
+      throw new Error("Transaksi tidak ditemukan / sudah dihapus");
     }
 
-    const toko = await prisma.toko.findUnique({
-      where: {
-        id: user.toko_id,
+    // 2. Balikin stok & terjual
+    await Promise.all(
+      transaksi.items.map((item) =>
+        tx.produk.update({
+          where: { id: item.idProduk },
+          data: {
+            stok: { increment: item.quantity }, // 🔥 BALIKIN STOK
+            terjual: { decrement: item.quantity }, // 🔥 BALIKIN TERJUAL
+          },
+        })
+      )
+    );
+
+    // 3. Soft delete transaksi
+    const deleted = await tx.transaksi.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        status: "dibatalkan", // optional tapi recommended
       },
     });
 
+    await createLog(
+      {
+        kategori: "Penjualan",
+        keterangan: `${user.nama} membatalkan transaksi`,
+        nominal: transaksi.keuntungan,
+        nama: user.nama,
+        idToko: user.toko_id,
+      },
+      tx
+    );
+
+    return deleted;
+  });
+};
+
+export const getHistoryTransaksi = async ({
+  idToko,
+  periode = "harian",
+  startDate: startDateParam,
+  endDate: endDateParam,
+  kategori = "all", // 🔥 NEW
+}) => {
+  try {
+    const now = new Date();
+    let startDate = new Date();
+    let endDate = new Date();
+
+    // =========================
+    // VALIDASI
+    // =========================
+    // VALIDASI
+    // =========================
+    if (periode === "custom") {
+      if (!startDateParam) {
+        throw new Error("startDate wajib diisi untuk custom");
+      }
+
+      // 🔥 kalau endDate kosong → default hari ini
+      if (!endDateParam) {
+        endDateParam = new Date().toISOString();
+      }
+
+      if (new Date(startDateParam) > new Date(endDateParam)) {
+        throw new Error("startDate tidak boleh lebih besar dari endDate");
+      }
+    }
+
+    // =========================
+    // FILTER TANGGAL
+    // =========================
+    switch (periode) {
+      case "harian":
+        startDate.setHours(0, 0, 0, 0);
+        break;
+
+      case "mingguan":
+        startDate.setDate(now.getDate() - 6);
+        break;
+
+      case "bulanan":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+
+      case "custom":
+        startDate = new Date(startDateParam);
+        endDate = new Date(endDateParam);
+
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+
+      default:
+        startDate = new Date(0);
+        endDate = now;
+    }
+
+    const dateFilter = {
+      gte: startDate,
+      lte: endDate,
+    };
+
+    // =========================
+    // FETCH DATA (OPTIMIZED)
+    // =========================
+    const [penjualan, jualanHarian, voucher, service, pengeluaran] =
+      await Promise.all([
+        prisma.transaksi.findMany({
+          where: {
+            idToko,
+            deletedAt: null,
+            tanggal: dateFilter,
+          },
+          include: {
+            Member: true,
+          },
+        }),
+
+        prisma.jualanHarian.findMany({
+          where: {
+            idToko,
+            deletedAt: null,
+            tanggal: dateFilter,
+          },
+          include: {
+            Member: true,
+          },
+        }),
+
+        prisma.transaksiVoucherHarian.findMany({
+          where: {
+            idToko,
+            deletedAt: null,
+            createdAt: dateFilter,
+          },
+          include: {
+            Produk: true,
+            Member: true,
+          },
+        }),
+
+        prisma.serviceHP.findMany({
+          where: {
+            idToko,
+            deletedAt: null,
+            tanggal: dateFilter,
+          },
+          include: {
+            Member: true,
+          },
+        }),
+
+        prisma.uangKeluar.findMany({
+          where: {
+            idToko,
+            tanggal: dateFilter,
+          },
+        }),
+      ]);
+
+    // =========================
+    // SUMMARY
+    // =========================
+    let totalPemasukan = 0;
+    let totalPengeluaran = 0;
+    let totalKeuntungan = 0;
+
+    // =========================
+    // NORMALIZE DATA
+    // =========================
+    const result = [
+      // 🔥 PENJUALAN
+      ...penjualan.map((t) => {
+        const keuntungan = t.keuntungan || 0;
+
+        totalPemasukan += keuntungan;
+        totalKeuntungan += keuntungan;
+
+        return {
+          id: t.id,
+          type: "penjualan",
+          nominal: keuntungan,
+          kategori: `Penjualan - ${t.type}`,
+          ts: t.tanggal,
+          nama: t.Member ? `👥 - ${t.Member.nama}` : t.namaPembeli || "Umum",
+        };
+      }),
+
+      // 🔥 JUALAN HARIAN
+      ...jualanHarian.map((t) => {
+        const nominal = t.nominal || 0;
+
+        totalPemasukan += nominal;
+        totalKeuntungan += nominal;
+
+        return {
+          id: t.id,
+          type: "jualan-harian",
+          nama: t.Member ? `👥 - ${t.Member.nama}` : "Umum",
+          nominal,
+          kategori: t.kategori,
+          ts: t.tanggal,
+        };
+      }),
+
+      // 🔥 VOUCHER
+      ...voucher.map((v) => {
+        const keuntungan = v.keuntungan || 0;
+
+        totalPemasukan += keuntungan;
+        totalKeuntungan += keuntungan;
+
+        return {
+          id: v.id,
+          type: "voucher",
+          nama: v.Member
+            ? `👥 - ${v.Member.nama} - ${v.Produk.brand} ${v.Produk.nama}`
+            : `${v.Produk.brand} ${v.Produk.nama}`,
+          nominal: keuntungan,
+          kategori: "Voucher Harian",
+          ts: v.createdAt,
+        };
+      }),
+
+      // 🔥 SERVICE
+      ...service.map((s) => {
+        const keuntungan = s.keuntungan || 0;
+
+        // 🔥 HITUNG HANYA YANG SELESAI
+        if (s.status === "Selesai") {
+          totalPemasukan += keuntungan;
+        }
+
+        return {
+          id: s.id,
+          type: "service",
+          nama: s.Member ? `👥 - ${s.Member.nama}` : s.namaPelangan || "Umum",
+          nominal: keuntungan,
+          kategori: "Service",
+          ts: s.tanggal,
+          status: s.status, // 🔥 penting buat UI (badge)
+        };
+      }),
+
+      // 🔥 PENGELUARAN
+      ...pengeluaran.map((u) => {
+        const jumlah = u.jumlah || 0;
+
+        totalPengeluaran += jumlah;
+
+        return {
+          id: u.id,
+          type: "pengeluaran",
+          nama: u.keterangan,
+          nominal: jumlah,
+          kategori: "Pengeluaran",
+          ts: u.tanggal,
+        };
+      }),
+    ];
+
+    // =========================
+    // SORTING (TERBARU)
+    // =========================
+
+    // =========================
+    // FILTER KATEGORI
+    // =========================
+    let filtered = result;
+
+    if (kategori !== "all") {
+      filtered = result.filter((item) => {
+        switch (kategori) {
+          case "penjualan":
+            return item.type === "penjualan";
+
+          case "jualan-harian":
+            return item.type === "jualan-harian";
+
+          case "voucher":
+            return item.type === "voucher";
+
+          case "service":
+            return item.type === "service";
+
+          case "pengeluaran":
+            return item.type === "pengeluaran";
+
+          case "pemasukan":
+            return item.type !== "pengeluaran";
+
+          default:
+            return true;
+        }
+      });
+    }
+
+    let totalPemasukanFiltered = 0;
+    let totalPengeluaranFiltered = 0;
+
+    filtered.forEach((item) => {
+      if (item.type === "pengeluaran") {
+        totalPengeluaranFiltered += item.nominal;
+      } else {
+        totalPemasukanFiltered += item.nominal;
+      }
+    });
+
+    const sorted = filtered.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+
+    // =========================
+    // RETURN FINAL
+    // =========================
     return {
-      namaToko: toko.namaToko,
-      logoToko: toko.logoToko,
-      alamat: toko.alamat,
-      noTelp: toko.noTelp,
-      transaksi,
+      summary: {
+        pemasukan: totalPemasukanFiltered,
+        pengeluaran: totalPengeluaranFiltered,
+        keuntungan: totalPemasukanFiltered - totalPengeluaranFiltered,
+      },
+      data: sorted,
     };
   } catch (error) {
-    console.log(error);
+    console.error("ERROR getHistoryTransaksi:", error);
+    throw error;
+  }
+};
+
+export const getLaporanUser = async ({
+  idUser,
+  kategori = "all",
+  startDate,
+  endDate,
+}) => {
+  try {
+    if (!idUser) throw new Error("idUser wajib");
+
+    const toLocalStart = (date) => {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+
+    const toLocalEnd = (date) => {
+      const d = new Date(date);
+      d.setHours(23, 59, 59, 999);
+      return d;
+    };
+
+    const whereDate =
+      startDate && endDate
+        ? {
+            gte: toLocalStart(startDate),
+            lte: toLocalEnd(endDate),
+          }
+        : undefined;
+
+    // =========================
+    // 🔥 QUERY PARALLEL
+    // =========================
+    const [transaksi, service, jualan, voucher] = await Promise.all([
+      prisma.transaksi.findMany({
+        where: {
+          idUser,
+          deletedAt: null,
+          ...(whereDate && { tanggal: whereDate }),
+        },
+        select: {
+          id: true,
+          tanggal: true,
+          keuntungan: true,
+          totalHarga: true,
+          type: true,
+        },
+      }),
+
+      prisma.serviceHP.findMany({
+        where: {
+          idUser,
+          status: "Selesai",
+          deletedAt: null,
+          ...(whereDate && { tanggal: whereDate }),
+        },
+        select: {
+          id: true,
+          tanggal: true,
+          keuntungan: true,
+          biayaJasa: true,
+        },
+      }),
+
+      prisma.jualanHarian.findMany({
+        where: {
+          idUser,
+          deletedAt: null,
+          ...(whereDate && { tanggal: whereDate }),
+        },
+        select: {
+          id: true,
+          tanggal: true,
+          nominal: true,
+          kategori: true,
+        },
+      }),
+
+      prisma.transaksiVoucherHarian.findMany({
+        where: {
+          idUser,
+          deletedAt: null,
+          ...(whereDate && { createdAt: whereDate }),
+        },
+        select: {
+          id: true,
+          createdAt: true,
+          keuntungan: true,
+        },
+      }),
+    ]);
+
+    // =========================
+    // 🔥 FILTER KATEGORI
+    // =========================
+    const data = {
+      transaksi:
+        kategori === "all" || kategori === "transaksi" ? transaksi : [],
+      service: kategori === "all" || kategori === "service" ? service : [],
+      jualan: kategori === "all" || kategori === "jualan" ? jualan : [],
+      voucher: kategori === "all" || kategori === "voucher" ? voucher : [],
+    };
+
+    // =========================
+    // 🔥 SUMMARY
+    // =========================
+    const summary = {
+      totalTransaksi:
+        data.transaksi.length +
+        data.service.length +
+        data.jualan.length +
+        data.voucher.length,
+
+      totalKeuntungan:
+        data.transaksi.reduce((a, b) => a + (b.keuntungan || 0), 0) +
+        data.service.reduce((a, b) => a + (b.keuntungan || 0), 0) +
+        data.jualan.reduce((a, b) => a + (b.nominal || 0), 0) +
+        data.voucher.reduce((a, b) => a + (b.keuntungan || 0), 0),
+    };
+
+    return {
+      data,
+      summary,
+    };
+  } catch (error) {
+    console.error("Error getLaporanUser:", error);
+    throw error;
   }
 };

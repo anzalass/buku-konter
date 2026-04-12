@@ -19,7 +19,7 @@ export const createProduk = async (data, user) => {
           ? parseInt(data.hargaGrosir)
           : parseInt(data.hargaEceran),
         hargaEceran: parseInt(data.hargaEceran),
-        stok: data.stok ? parseInt(data.stok) : 0,
+        stok: data.stok ? parseInt(data.stok) : 9999999,
         idToko: user.toko_id,
       },
     });
@@ -247,6 +247,9 @@ export const getAllProdukVoucher = async (idToko) => {
         isActive: true,
         kategori: "Voucher",
       },
+      orderBy: {
+        hargaEceran: "asc",
+      },
     });
   } catch (error) {
     console.log(error);
@@ -254,5 +257,48 @@ export const getAllProdukVoucher = async (idToko) => {
       throw error;
     }
     throw new Error(prismaErrorHandler(error));
+  }
+};
+
+export const getAllProdukSparepart = async (idToko) => {
+  try {
+    return await prisma.produk.findMany({
+      where: {
+        idToko,
+        isActive: true,
+        kategori: "Sparepart",
+      },
+      orderBy: {
+        hargaEceran: "asc",
+      },
+    });
+  } catch (error) {
+    console.log(error);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(prismaErrorHandler(error));
+  }
+};
+
+export const getAllProdukActive = async ({ user }) => {
+  console.log("yaysyas", user);
+
+  try {
+    const data = await prisma.produk.findMany({
+      where: {
+        isActive: true,
+        idToko: user.toko_id,
+        stok: {
+          gt: 0,
+        },
+      },
+      orderBy: [{ terjual: "desc" }, { updatedAt: "desc" }],
+    });
+
+    return data;
+  } catch (error) {
+    console.error("Error getAllProdukActive:", error);
+    throw new Error("Gagal mengambil produk");
   }
 };

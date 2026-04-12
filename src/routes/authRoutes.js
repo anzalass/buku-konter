@@ -8,6 +8,7 @@ import {
   deleteUserHandler,
   loginController2,
   logoutHandler,
+  getAllUserByIdTokoController,
 } from "../controller/authController.js";
 import {
   AuthMiddleware2,
@@ -48,7 +49,7 @@ router.delete(
 );
 router.get("/me", AuthMiddleware2);
 router.post("/auth/logout", logoutHandler);
-
+router.get("/user-toko-master", AuthMiddleware, getAllUserByIdTokoController);
 router.post("/auth/login", loginController2);
 
 export default router;

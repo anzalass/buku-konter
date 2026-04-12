@@ -11,5 +11,20 @@ router.get("/produk/:id", AuthMiddleware, controller.getById);
 router.put("/produk/:id", AuthMiddleware, controller.update);
 router.delete("/produk/:id", AuthMiddleware, controller.remove);
 router.patch("/produk/:id/stok", AuthMiddleware, controller.updateStok);
+router.get(
+  "/produk-active",
+  AuthMiddleware,
+  controller.getAllProdukActiveHandler
+);
+router.get(
+  "/produk-voucher",
+  AuthMiddleware,
+  controller.getAllProdukVoucherActiveHandler
+);
 
+router.get(
+  "/produk-sparepart",
+  AuthMiddleware,
+  controller.getAllProdukSparepartActiveHandler
+);
 export default router;

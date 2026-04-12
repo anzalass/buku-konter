@@ -5,6 +5,7 @@ import {
   updateUser,
   deleteUser,
   login,
+  getAllUserByIdToko,
 } from "../service/authService.js";
 
 // GET /api/users
@@ -149,6 +150,27 @@ export const logoutHandler = async (req, res) => {
     return res.status(500).json({
       message: "Gagal logout",
       success: false,
+    });
+  }
+};
+
+export const getAllUserByIdTokoController = async (req, res) => {
+  try {
+    const idToko = req.user.toko_id; // 🔥 ambil dari token
+
+    const data = await getAllUserByIdToko(idToko);
+
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil mengambil data user",
+      data,
+    });
+  } catch (error) {
+    console.error("ERROR getAllUserByIdTokoController:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Terjadi kesalahan server",
     });
   }
 };

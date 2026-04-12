@@ -1,4 +1,4 @@
-// src/services/uangModal.service.js
+// src/services/uangKeluar.service.js
 import { PrismaClient } from "@prisma/client";
 import { createLog } from "./logService.js";
 import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
@@ -6,7 +6,7 @@ import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
 const prisma = new PrismaClient();
 
 // ✅ GET ALL with filter & pagination
-export const getAllUangModal = async ({
+export const getAlluangKeluar = async ({
   page = 1,
   pageSize = 10,
   search = "",
@@ -33,13 +33,13 @@ export const getAllUangModal = async ({
   }
 
   const [data, total] = await prisma.$transaction([
-    prisma.uangModal.findMany({
+    prisma.uangKeluar.findMany({
       where,
       skip,
       take,
       orderBy: { tanggal: "desc" },
     }),
-    prisma.uangModal.count({ where }),
+    prisma.uangKeluar.count({ where }),
   ]);
 
   return {
@@ -53,7 +53,7 @@ export const getAllUangModal = async ({
   };
 };
 
-export const createUangModal = async (data) => {
+export const createuangKeluar = async (data) => {
   try {
     const { keterangan, tanggal, jumlah, idToko, user } = data;
 
@@ -66,11 +66,11 @@ export const createUangModal = async (data) => {
     }
 
     return await prisma.$transaction(async (tx) => {
-      const modal = await tx.uangModal.create({
+      const modal = await tx.uangKeluar.create({
         data: {
           keterangan,
           idToko,
-          tanggal: new Date(),
+          tanggal: new Date(tanggal), // 🔥 ini penting
           jumlah: Number(jumlah),
         },
       });
@@ -89,7 +89,7 @@ export const createUangModal = async (data) => {
       return modal;
     });
   } catch (error) {
-    console.error("Error createUangModal:", error);
+    console.error("Error createuangKeluar:", error);
 
     throw new Error(
       error.message || "Terjadi kesalahan saat menambahkan uang modal"
@@ -97,7 +97,7 @@ export const createUangModal = async (data) => {
   }
 };
 
-export const updateUangModal = async (id, data, user) => {
+export const updateuangKeluar = async (id, data, user) => {
   try {
     const { keterangan, tanggal, jumlah } = data;
 
@@ -110,7 +110,7 @@ export const updateUangModal = async (id, data, user) => {
     }
 
     return await prisma.$transaction(async (tx) => {
-      const existing = await tx.uangModal.findUnique({
+      const existing = await tx.uangKeluar.findUnique({
         where: { id },
       });
 
@@ -118,7 +118,7 @@ export const updateUangModal = async (id, data, user) => {
         throw new Error("Data uang modal tidak ditemukan");
       }
 
-      const updated = await tx.uangModal.update({
+      const updated = await tx.uangKeluar.update({
         where: { id },
         data: {
           keterangan,
@@ -141,7 +141,7 @@ export const updateUangModal = async (id, data, user) => {
       return updated;
     });
   } catch (error) {
-    console.error("Error updateUangModal:", error);
+    console.error("Error updateuangKeluar:", error);
 
     throw new Error(
       error.message || "Terjadi kesalahan saat mengupdate uang modal"
@@ -149,10 +149,10 @@ export const updateUangModal = async (id, data, user) => {
   }
 };
 
-export const deleteUangModal = async (id, user) => {
+export const deleteuangKeluar = async (id, user) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      const existing = await tx.uangModal.findUnique({
+      const existing = await tx.uangKeluar.findUnique({
         where: { id },
       });
 
@@ -171,14 +171,14 @@ export const deleteUangModal = async (id, user) => {
         tx
       );
 
-      await tx.uangModal.delete({
+      await tx.uangKeluar.delete({
         where: { id },
       });
 
       return { success: true };
     });
   } catch (error) {
-    console.error("Error deleteUangModal:", error);
+    console.error("Error deleteuangKeluar:", error);
 
     throw new Error(
       error.message || "Terjadi kesalahan saat menghapus uang modal"

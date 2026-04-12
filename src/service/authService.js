@@ -254,3 +254,21 @@ export const login = async (auth) => {
     throw new Error(prismaErrorHandler(error));
   }
 };
+
+export const getAllUserByIdToko = async (idToko) => {
+  try {
+    return await prisma.user.findMany({
+      where: {
+        isActive: true,
+        idToko: idToko,
+      },
+    });
+  } catch (error) {
+    console.log(error);
+
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(prismaErrorHandler(error));
+  }
+};

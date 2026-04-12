@@ -42,6 +42,8 @@ export const getMembersWithFilterHandler = async (req, res) => {
       endDate,
     } = req.query;
 
+    console.log("tau", search);
+
     const result = await getMembersWithFilter({
       page,
       pageSize,

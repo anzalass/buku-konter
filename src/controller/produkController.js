@@ -92,3 +92,62 @@ export const getAll = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// controllers/produkController.js
+
+export const getAllProdukActiveHandler = async (req, res) => {
+  console.log("kuku", req.user);
+
+  try {
+    const data = await produkService.getAllProdukActive({
+      user: req.user, // 🔥 dari middleware auth
+    });
+
+    return res.status(200).json({
+      message: "Berhasil mengambil produk aktif",
+      data,
+    });
+  } catch (error) {
+    console.error("Error getAllProdukActiveHandler:", error);
+
+    res.status(500).json({
+      message: error.message || "Terjadi kesalahan server",
+    });
+  }
+};
+
+export const getAllProdukVoucherActiveHandler = async (req, res) => {
+  console.log("kuku", req.user);
+
+  try {
+    const data = await produkService.getAllProdukVoucher(req.user.toko_id);
+    return res.status(200).json({
+      message: "Berhasil mengambil produk aktif",
+      data,
+    });
+  } catch (error) {
+    console.error("Error getAllProdukActiveHandler:", error);
+
+    res.status(500).json({
+      message: error.message || "Terjadi kesalahan server",
+    });
+  }
+};
+
+export const getAllProdukSparepartActiveHandler = async (req, res) => {
+  console.log("kuku", req.user);
+
+  try {
+    const data = await produkService.getAllProdukSparepart(req.user.toko_id);
+    return res.status(200).json({
+      message: "Berhasil mengambil produk aktif",
+      data,
+    });
+  } catch (error) {
+    console.error("Error getAllProdukActiveHandler:", error);
+
+    res.status(500).json({
+      message: error.message || "Terjadi kesalahan server",
+    });
+  }
+};

@@ -38,102 +38,96 @@ export const createLog = async (
    GET ALL LOGS
 ========================= */
 export const getAllLogs = async ({
-  page = 1,
-  pageSize = 10,
-  search = "",
-  kategori,
-  nama,
+  idToko,
+  nama = "",
+  kategori = "all",
+  keterangan = "",
   startDate,
   endDate,
-  minNominal,
-  maxNominal,
-  idToko,
+  page = 1,
+  pageSize = 10,
 }) => {
   try {
-    if (!idToko) {
-      throw new Error("idToko wajib diisi");
+    const skip = (page - 1) * pageSize;
+    const take = parseInt(pageSize);
+
+    // =========================
+    // DATE FILTER
+    // =========================
+    let dateFilter = undefined;
+
+    if (startDate || endDate) {
+      dateFilter = {
+        gte: startDate ? new Date(startDate) : new Date(0),
+        lte: endDate ? new Date(endDate) : new Date(),
+      };
     }
 
-    const take = Math.max(1, Math.min(Number(pageSize), 100));
-    const skip = (Math.max(1, Number(page)) - 1) * take;
-
+    // =========================
+    // WHERE (MODULAR FILTER)
+    // =========================
     const where = {
       idToko,
+
+      // 🔥 FILTER NAMA
+      ...(nama && {
+        nama: {
+          contains: nama,
+          mode: "insensitive",
+        },
+      }),
+
+      // 🔥 FILTER KATEGORI
+      ...(kategori !== "all" && {
+        kategori: {
+          equals: kategori,
+          mode: "insensitive",
+        },
+      }),
+
+      // 🔥 FILTER KETERANGAN
+      ...(keterangan && {
+        keterangan: {
+          contains: keterangan,
+          mode: "insensitive",
+        },
+      }),
+
+      // 🔥 FILTER TANGGAL
+      ...(dateFilter && {
+        createdAt: dateFilter,
+      }),
     };
 
-    /* =========================
-       SEARCH GLOBAL
-    ========================== */
-    if (search) {
-      where.OR = [
-        { keterangan: { contains: search, mode: "insensitive" } },
-        { nama: { contains: search, mode: "insensitive" } },
-      ];
-    }
-
-    /* =========================
-       FILTER KATEGORI
-    ========================== */
-    if (kategori) {
-      where.kategori = {
-        contains: kategori,
-        mode: "insensitive",
-      };
-    }
-
-    /* =========================
-       FILTER NAMA
-    ========================== */
-    if (nama) {
-      where.nama = {
-        contains: nama,
-        mode: "insensitive",
-      };
-    }
-
-    /* =========================
-       FILTER TANGGAL
-    ========================== */
-    // FILTER TANGGAL (WIB → UTC)
-    if (startDate || endDate) {
-      const range = toUTCFromWIBRange(startDate, endDate);
-
-      where.createdAt = {};
-
-      if (range.gte) where.createdAt.gte = range.gte;
-      if (range.lte) where.createdAt.lte = range.lte;
-    }
-
-    /* =========================
-       FILTER NOMINAL
-    ========================== */
-    if (minNominal != null || maxNominal != null) {
-      where.nominal = {};
-      if (minNominal != null) where.nominal.gte = Number(minNominal);
-      if (maxNominal != null) where.nominal.lte = Number(maxNominal);
-    }
-
-    const [data, total] = await prisma.$transaction([
+    // =========================
+    // QUERY
+    // =========================
+    const [data, total] = await Promise.all([
       prisma.log.findMany({
         where,
+        orderBy: {
+          createdAt: "desc",
+        },
         skip,
         take,
-        orderBy: { createdAt: "desc" },
       }),
       prisma.log.count({ where }),
     ]);
 
+    // =========================
+    // RETURN
+    // =========================
     return {
       data,
-      meta: {
-        page: Number(page),
-        pageSize: take,
+      pagination: {
         total,
-        totalPages: Math.ceil(total / take),
+        page,
+        pageSize,
+        totalPage: Math.ceil(total / pageSize),
       },
     };
   } catch (error) {
-    console.error("Error getAllLogs:", error);
+    console.error("ERROR getLogs:", error);
     throw new Error("Gagal mengambil data log");
   }
 };
