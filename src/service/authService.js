@@ -193,6 +193,9 @@ export const login = async (auth) => {
 
     const user = await prisma.user.findUnique({
       where: { email },
+      include: {
+        Toko: true,
+      },
     });
 
     if (!user || !user.password) {
@@ -230,6 +233,9 @@ export const login = async (auth) => {
         id: user.id,
         nama: user.nama,
         role: user.role,
+        namaToko: user.Toko.namaToko,
+        alamat: user.Toko.alamat,
+        noTelp: user.Toko.noTelp,
         penempatan: user.penempatan,
         toko_id: toko.id,
       },
@@ -242,6 +248,9 @@ export const login = async (auth) => {
       id: user.id,
       nama: user.nama,
       role: user.role,
+      namaToko: user.Toko.namaToko,
+      alamat: user.Toko.alamat,
+      noTelp: user.Toko.noTelp,
       penempatan: user.penempatan,
       toko_id: toko.id,
     };

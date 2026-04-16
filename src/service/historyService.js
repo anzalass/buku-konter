@@ -68,49 +68,56 @@ export const getAllTransaksi = async (params) => {
     idToko,
     search = "",
     isActive = true,
-    periode = "mingguan",
+    periode,
     startDate,
     endDate,
+    isExport = false,
     page = 1,
     pageSize = 10,
   } = params;
 
   const { skip, take } = getPagination({ page, pageSize });
+  console.log(search, isExport);
 
   const where = {
     idToko,
     deletedAt: isActive ? null : { not: null },
-    tanggal: getDateRange({ periode, startDate, endDate }),
-    ...(search && {
-      OR: [
+  };
+
+  // 🔥 kalau export semua → skip filter
+  if (!isExport) {
+    if (periode || startDate || endDate) {
+      where.tanggal = getDateRange({ periode, startDate, endDate });
+    }
+
+    if (search) {
+      where.OR = [
         { namaPembeli: { contains: search, mode: "insensitive" } },
         { Member: { nama: { contains: search, mode: "insensitive" } } },
-      ],
-    }),
-  };
-  const [data, total, sum] = await Promise.all([
-    prisma.transaksi.findMany({
-      where,
-      include: { Member: true },
-      orderBy: { tanggal: "desc" },
-      skip,
-      take,
-    }),
-    prisma.transaksi.count({ where }),
-    prisma.transaksi.aggregate({
-      where,
-      _sum: {
-        totalHarga: true,
-        keuntungan: true,
-      },
-    }),
-  ]);
+      ];
+    }
+  }
+
+  const data = await prisma.transaksi.findMany({
+    where,
+    include: { Member: true },
+    orderBy: { tanggal: "desc" },
+    ...(isExport ? {} : { skip, take }),
+  });
+
+  const total = await prisma.transaksi.count({ where });
+
+  const sum = await prisma.transaksi.aggregate({
+    where,
+    _sum: {
+      totalHarga: true,
+      keuntungan: true,
+    },
+  });
 
   return {
     data,
     total,
-    page,
-    pageSize,
     summary: {
       totalData: total,
       omset: sum._sum.totalHarga || 0,
@@ -123,9 +130,10 @@ export const getAllVoucher = async (params) => {
     idToko,
     search = "",
     isActive = true,
-    periode = "mingguan",
+    periode,
     startDate,
     endDate,
+    isExport = false,
     page = 1,
     pageSize = 10,
   } = params;
@@ -135,38 +143,40 @@ export const getAllVoucher = async (params) => {
   const where = {
     idToko,
     deletedAt: isActive ? null : { not: null },
-    createdAt: getDateRange({ periode, startDate, endDate }),
-    OR: [
-      { Member: { nama: { contains: search, mode: "insensitive" } } },
-      { Produk: { nama: { contains: search, mode: "insensitive" } } },
-    ],
   };
 
-  const [data, total, keuntunganAgg] = await Promise.all([
-    prisma.transaksiVoucherHarian.findMany({
-      where,
-      include: { Member: true, Produk: true },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take,
-    }),
-    prisma.transaksiVoucherHarian.count({ where }),
-    prisma.transaksiVoucherHarian.aggregate({
-      where,
-      _sum: {
-        keuntungan: true,
-      },
-    }),
-  ]);
+  if (!isExport) {
+    if (periode || startDate || endDate) {
+      where.createdAt = getDateRange({ periode, startDate, endDate });
+    }
 
-  // 🔥 OMSET MANUAL (karena dari relasi)
+    if (search) {
+      where.OR = [
+        { Member: { nama: { contains: search, mode: "insensitive" } } },
+        { Produk: { nama: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+  }
+
+  const data = await prisma.transaksiVoucherHarian.findMany({
+    where,
+    include: { Member: true, Produk: true },
+    orderBy: { createdAt: "desc" },
+    ...(isExport ? {} : { skip, take }),
+  });
+
+  const total = await prisma.transaksiVoucherHarian.count({ where });
+
+  const keuntunganAgg = await prisma.transaksiVoucherHarian.aggregate({
+    where,
+    _sum: { keuntungan: true },
+  });
+
   const omset = data.reduce((acc, v) => acc + (v.Produk?.hargaEceran || 0), 0);
 
   return {
     data,
     total,
-    page,
-    pageSize,
     summary: {
       totalData: total,
       omset,

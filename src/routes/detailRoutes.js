@@ -18,6 +18,7 @@ router.use(AuthMiddleware);
 // ==========================
 
 router.get("/detail/transaksi/:id", detailTransaksi);
+
 router.get("/detail/service/:id", detailServiceHP);
 router.get("/detail/jualan-harian/:id", detailJualanHarian);
 router.get("/detail/voucher-harian/:id", detailVoucherHarian);

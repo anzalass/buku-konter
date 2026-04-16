@@ -18,9 +18,11 @@ const parseQuery = (req) => {
     endDate: req.query.endDate,
     page: Number(req.query.page) || 1,
     pageSize: Number(req.query.pageSize) || 10,
+
+    // 🔥 FIX INI
+    isExport: req.query.isExport === "true",
   };
 };
-
 // ==============================
 // TRANSAKSI
 // ==============================

@@ -53,6 +53,21 @@ export const getAlluangKeluar = async ({
   };
 };
 
+const parseTanggalWithCurrentTime = (tgl) => {
+  const now = new Date();
+  const [year, month, day] = tgl.split("-").map(Number);
+
+  return new Date(
+    year,
+    month - 1,
+    day,
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  );
+};
+
 export const createuangKeluar = async (data) => {
   try {
     const { keterangan, tanggal, jumlah, idToko, user } = data;
@@ -70,7 +85,7 @@ export const createuangKeluar = async (data) => {
         data: {
           keterangan,
           idToko,
-          tanggal: new Date(tanggal), // 🔥 ini penting
+          tanggal: parseTanggalWithCurrentTime(tanggal), // ✅ FULL DATETIME
           jumlah: Number(jumlah),
         },
       });
