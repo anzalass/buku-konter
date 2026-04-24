@@ -1,5 +1,5 @@
 // src/services/serviceHP.service.js
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, StatusServis } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
 import { createLog } from "./logService.js";
 import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
@@ -22,6 +22,8 @@ export const createServiceHP = async (data, user) => {
       noHP,
       namaPelanggan,
     } = data;
+
+    console.log(status);
 
     if (!brandHP || !keterangan || !status || biayaJasa == null || !noHP) {
       throw new Error("Field wajib tidak lengkap");
@@ -77,7 +79,7 @@ export const createServiceHP = async (data, user) => {
         data: {
           brandHP,
           keterangan,
-          status,
+          statusServis: status,
           tanggal: new Date(),
           noHP,
           Toko: {
@@ -137,9 +139,19 @@ export const createServiceHP = async (data, user) => {
     throw new Error("Gagal membuat service HP");
   }
 };
-export const updateServiceHPStatus = async (id, status, user) => {
+export const updateServiceHPStatus = async (id, payload, user) => {
   try {
-    const allowedStatus = ["Pending", "Selesai", "Proses", "Gagal", "Batal"];
+    const { status, garansiDate } = payload;
+    console.log(status);
+
+    const allowedStatus = [
+      "Pending",
+      "Selesai",
+      "Proses",
+      "Gagal",
+      "Batal",
+      "Sudah Diambil",
+    ];
 
     if (!allowedStatus.includes(status)) {
       throw new Error("Status tidak valid");
@@ -154,15 +166,30 @@ export const updateServiceHPStatus = async (id, status, user) => {
         throw new Error("Service tidak ditemukan");
       }
 
+      // 🔥 tentukan garansi
+      let finalGaransi = null;
+
+      if (status === "Sudah Diambil") {
+        finalGaransi = garansiDate ? new Date(garansiDate) : null;
+      }
+
       const updated = await tx.serviceHP.update({
         where: { id },
-        data: { status },
+        data: {
+          statusServis: status === "Sudah Diambil" ? "Selesai" : status, // 🔥 FIX field
+          statusAmbil:
+            status === "Sudah Diambil" ? "SudahDiambil" : service.statusAmbil,
+          garansiBerakhir: finalGaransi, // 🔥 NEW
+          garansiMulai: status === "Sudah Diambil" ? new Date() : null,
+          tanggalAmbil: new Date(),
+          statusGaransi: finalGaransi ? "Belum Di Klaim" : null,
+        },
       });
 
       await createLog(
         {
           kategori: "Service HP",
-          keterangan: `${user.nama} mengubah status service ${service.keterangan} menjadi ${status}`,
+          keterangan: `${user.nama} mengubah status service "${service.keterangan}" menjadi ${status}`,
           nama: user.nama,
           idToko: user.toko_id,
         },
@@ -402,6 +429,143 @@ export const getDetailServiceHP = async (id, user) => {
     noTelp: toko.noTelp,
     transaksi,
   };
+};
 
-  return data;
+// 🔥 CREATE KLAIM
+export const createKlaimGaransi = async (data, user) => {
+  const { idService, keterangan, items = [] } = data;
+
+  if (!idService) throw new Error("Service wajib diisi");
+
+  return await prisma.$transaction(async (tx) => {
+    const service = await tx.serviceHP.findUnique({
+      where: { id: idService },
+    });
+
+    if (!service) throw new Error("Service tidak ditemukan");
+
+    // 🔥 VALIDASI + HITUNG
+    for (const item of items) {
+      if (
+        !item.idProduct ||
+        !item.quantityProduct ||
+        item.quantityProduct <= 0
+      ) {
+        throw new Error("Item klaim tidak valid");
+      }
+
+      const produk = await tx.produk.findUnique({
+        where: { id: item.idProduct },
+      });
+
+      if (!produk) {
+        throw new Error("Produk tidak ditemukan");
+      }
+
+      if (produk.stok < item.quantityProduct) {
+        throw new Error(`Stok ${produk.nama} tidak cukup`);
+      }
+    }
+
+    // 🔥 CREATE KLAIM
+    const klaim = await tx.klaimGaransi.create({
+      data: {
+        ServiceHP: {
+          connect: { id: idService },
+        },
+        Toko: {
+          connect: { id: user.toko_id },
+        },
+        keterangan,
+        item: {
+          create: items.map((i) => ({
+            idProduct: i.idProduct,
+            quantityProduct: i.quantityProduct,
+            keterangan: i.keterangan,
+            idToko: user.toko_id,
+            idService,
+          })),
+        },
+      },
+      include: {
+        item: true,
+      },
+    });
+
+    // 🔥 KURANGI STOK
+    for (const item of items) {
+      await tx.produk.update({
+        where: { id: item.idProduct },
+        data: {
+          stok: { decrement: item.quantityProduct },
+        },
+      });
+    }
+
+    // 🔥 OPTIONAL: update status garansi
+    // await tx.serviceHP.update({
+    //   where: { id: idService },
+    //   data: {
+    //     // contoh kalau mau tandain sudah pernah klaim
+    //     // (optional tergantung flow lu)
+    //     // statusGaransi: "Sudah Klaim"
+    //   },
+    // });
+
+    await createLog(
+      {
+        kategori: "Klaim Garansi",
+        keterangan: `${user.nama} membuat klaim garansi`,
+        nama: user.nama,
+        idToko: user.toko_id,
+      },
+      tx
+    );
+
+    return klaim;
+  });
+};
+
+export const deleteKlaimGaransi = async (id) => {
+  return await prisma.$transaction(async (tx) => {
+    // 1. ambil klaim + items
+    const klaim = await tx.klaimGaransi.findUnique({
+      where: { id },
+      include: {
+        item: true,
+      },
+    });
+
+    if (!klaim) {
+      throw new Error("Klaim tidak ditemukan");
+    }
+
+    if (klaim.deletedAt) {
+      throw new Error("Klaim sudah dihapus");
+    }
+
+    // 2. balikin stok
+    for (const item of klaim.item) {
+      if (!item.idProduct) continue;
+
+      await tx.produk.update({
+        where: { id: item.idProduct },
+        data: {
+          stok: {
+            increment: item.quantityProduct, // 🔥 BALIKIN
+          },
+        },
+      });
+    }
+
+    // 3. soft delete klaim
+    const deleted = await tx.klaimGaransi.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    return deleted;
+  });
 };

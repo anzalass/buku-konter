@@ -10,12 +10,12 @@ export const getAllMembers = async (user) => {
         idToko: user.toko_id,
       },
       select: {
+        kodeMember: true,
         id: true,
         nama: true,
         noTelp: true,
         createdAt: true,
         updatedAt: true,
-        kodeMember: true,
         // Jangan include relasi berat secara default
       },
     });

@@ -210,6 +210,12 @@ export const getAllServiceHP = async (params) => {
     ],
   };
 
+  const whereSummary = {
+    ...where,
+    statusServis: "Selesai",
+    statusAmbil: "SudahDiambil",
+  };
+
   const [data, total, sum] = await Promise.all([
     prisma.serviceHP.findMany({
       where,
@@ -220,7 +226,7 @@ export const getAllServiceHP = async (params) => {
     }),
     prisma.serviceHP.count({ where }),
     prisma.serviceHP.aggregate({
-      where,
+      whereSummary,
       _sum: {
         biayaJasa: true,
         hargaSparePart: true,

@@ -177,6 +177,7 @@ export const getAllProduk = async ({
   page = 1,
   pageSize = 10,
   search = "",
+  penempatan = "",
   kategori,
   brand,
   createdStart,
@@ -195,23 +196,41 @@ export const getAllProduk = async ({
       isActive: true,
       idToko,
       AND: [
-        search && {
-          nama: {
-            contains: search,
-            mode: "insensitive",
-          },
-        },
-        kategori && { kategori },
-        brand && { brand },
-        (createdStart || createdEnd) && {
-          createdAt: createdRange,
-        },
-        (updatedStart || updatedEnd) && {
-          updatedAt: updatedRange,
-        },
+        search
+          ? {
+              nama: {
+                contains: search,
+                mode: "insensitive",
+              },
+            }
+          : undefined,
+
+        penempatan
+          ? {
+              penempatan: {
+                contains: penempatan,
+                mode: "insensitive",
+              },
+            }
+          : undefined,
+
+        kategori ? { kategori } : undefined,
+
+        brand ? { brand } : undefined,
+
+        createdStart || createdEnd
+          ? {
+              createdAt: createdRange,
+            }
+          : undefined,
+
+        updatedStart || updatedEnd
+          ? {
+              updatedAt: updatedRange,
+            }
+          : undefined,
       ].filter(Boolean),
     };
-
     const [data, total] = await Promise.all([
       prisma.produk.findMany({
         where,
@@ -301,4 +320,47 @@ export const getAllProdukActive = async ({ user }) => {
     console.error("Error getAllProdukActive:", error);
     throw new Error("Gagal mengambil produk");
   }
+};
+
+export const searchProduk = async (query, user) => {
+  if (!query || query.trim() === "") return [];
+
+  return await prisma.produk.findMany({
+    where: {
+      idToko: user.toko_id,
+      isActive: true,
+      OR: [
+        {
+          nama: {
+            contains: query,
+            mode: "insensitive",
+          },
+        },
+        {
+          brand: {
+            contains: query,
+            mode: "insensitive",
+          },
+        },
+        {
+          kategori: {
+            contains: query,
+            mode: "insensitive",
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      nama: true,
+      hargaEceran: true,
+      stok: true,
+      brand: true,
+      kategori: true,
+    },
+    take: 20, // 🔥 limit biar gak berat
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
 };

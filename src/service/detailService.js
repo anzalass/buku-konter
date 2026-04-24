@@ -49,6 +49,15 @@ export const getDetailServiceHP = async (id, idToko) => {
           Produk: true,
         },
       },
+      klaimGaransi: {
+        include: {
+          item: {
+            include: {
+              Product: true,
+            },
+          },
+        },
+      },
     },
   });
 

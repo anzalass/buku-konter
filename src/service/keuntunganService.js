@@ -668,7 +668,7 @@ export const getKeuntunganDashboard = async ({
         where: {
           idToko,
           deletedAt: null,
-          status: "Selesai",
+          statusAmbil: "SudahDiambil",
           tanggal: { gte: start, lte: end },
         },
         _sum: { keuntungan: true },

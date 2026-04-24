@@ -1,6 +1,8 @@
 import express from "express";
 import {
+  createKlaimGaransiController,
   createServiceHPHandler,
+  deleteKlaimGaransiController,
   deleteServiceHPHandler,
   getAllServiceHPHandler,
   getDetailService,
@@ -25,5 +27,14 @@ router.get("/service-hp-print/:id", AuthMiddleware, getDetailService);
 
 // DELETE /api/service-hp/:id      → Hapus service
 router.delete("/service-hp/:id", AuthMiddleware, deleteServiceHPHandler);
+// 🔥 CREATE
+router.post("/klaim-garansi", AuthMiddleware, createKlaimGaransiController);
+
+// 🔥 DELETE
+router.delete(
+  "/klaim-garansi/:id",
+  AuthMiddleware,
+  deleteKlaimGaransiController
+);
 
 export default router;

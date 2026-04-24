@@ -27,4 +27,6 @@ router.get(
   AuthMiddleware,
   controller.getAllProdukSparepartActiveHandler
 );
+
+router.get("/produk-search", AuthMiddleware, controller.searchProdukController);
 export default router;

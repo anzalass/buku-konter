@@ -4,6 +4,7 @@ import {
   createDataMember,
   updateDataMember,
   deleteDataMember,
+  searchDataMemberService,
 } from "../service/dataMemberService.js";
 
 /* =========================
@@ -115,6 +116,23 @@ export const deleteDataMemberController = async (req, res) => {
 
     res.status(500).json({
       message: error.message || "Gagal menghapus data member",
+    });
+  }
+};
+
+// controllers/dataMember.controller.js
+
+export const searchDataMember = async (req, res) => {
+  try {
+    const { q } = req.query;
+
+    const data = await searchDataMemberService(q);
+
+    res.json({ data });
+  } catch (err) {
+    console.error("Search DataMember Error:", err);
+    res.status(500).json({
+      message: "Gagal search member",
     });
   }
 };

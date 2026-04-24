@@ -5,6 +5,8 @@ import {
   deleteServiceHP,
   getAllServiceHP,
   getDetailServiceHP,
+  createKlaimGaransi,
+  deleteKlaimGaransi,
 } from "../service/serviceHPService.js";
 
 export const createServiceHPHandler = async (req, res) => {
@@ -55,13 +57,12 @@ export const createServiceHPHandler = async (req, res) => {
 export const updateServiceHPStatusHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
 
-    if (!status) {
-      return res.status(400).json({ error: "Status wajib diisi" });
-    }
+    // if (!status) {
+    //   return res.status(400).json({ error: "Status wajib diisi" });
+    // }
 
-    await updateServiceHPStatus(id, status, req.user);
+    await updateServiceHPStatus(id, req.body, req.user);
     res.json({ success: true });
   } catch (error) {
     console.error("Update Status Error:", error);
@@ -117,5 +118,50 @@ export const getDetailService = async (req, res) => {
     res.json({ success: true, data });
   } catch (err) {
     res.status(404).json({ success: false, message: err.message });
+  }
+};
+
+// 🔥 CREATE
+export const createKlaimGaransiController = async (req, res) => {
+  try {
+    const user = req.user; // dari middleware auth
+    const data = req.body;
+
+    const result = await createKlaimGaransi(data, user);
+
+    return res.status(201).json({
+      success: true,
+      message: "Klaim garansi berhasil dibuat",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error createKlaimGaransi:", error);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Gagal membuat klaim garansi",
+    });
+  }
+};
+
+// 🔥 DELETE (soft delete + balikin stok)
+export const deleteKlaimGaransiController = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await deleteKlaimGaransi(id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Klaim garansi berhasil dihapus",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error deleteKlaimGaransi:", error);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Gagal menghapus klaim garansi",
+    });
   }
 };

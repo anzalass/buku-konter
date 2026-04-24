@@ -65,6 +65,7 @@ export const getAll = async (req, res) => {
       page,
       pageSize,
       search,
+      penempatan,
       kategori,
       brand,
       createdStart,
@@ -79,6 +80,7 @@ export const getAll = async (req, res) => {
       search,
       kategori,
       brand,
+      penempatan,
       createdStart,
       createdEnd,
       updatedStart,
@@ -148,6 +150,26 @@ export const getAllProdukSparepartActiveHandler = async (req, res) => {
 
     res.status(500).json({
       message: error.message || "Terjadi kesalahan server",
+    });
+  }
+};
+
+export const searchProdukController = async (req, res) => {
+  try {
+    const { q } = req.query;
+
+    const data = await produkService.searchProduk(q, req.user);
+
+    res.json({
+      success: true,
+      message: "Search produk berhasil",
+      data,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Terjadi kesalahan saat search",
     });
   }
 };

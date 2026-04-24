@@ -45,6 +45,7 @@ import dataMemberRoutes from "./routes/dataMemberRoutes.js";
 import keuntunganRoutes from "./routes/keuntunganRoutes.js";
 import historyRoutes from "./routes/historyRoutes.js";
 import detailRoutes from "./routes/detailRoutes.js";
+import kejadianTakTerdugaRoutes from "./routes/kejadianTakTerdugaRoutes.js";
 
 import { startDailyKeuntunganCron } from "./service/keuntunganService.js";
 
@@ -63,6 +64,7 @@ app.use("/api/v1", dataMemberRoutes);
 app.use("/api/v1", keuntunganRoutes);
 app.use("/api/v1", historyRoutes);
 app.use("/api/v1", detailRoutes);
+app.use("/api/v1", kejadianTakTerdugaRoutes);
 
 app.use(errorHandler);
 startDailyKeuntunganCron();

@@ -175,3 +175,39 @@ export const deleteDataMember = async (id, user) => {
     throw new Error("Gagal menghapus data member");
   }
 };
+
+// services/dataMember.service.js
+
+export const searchDataMemberService = async (q) => {
+  if (!q || q.length < 2) return [];
+
+  return await prisma.dataMember.findMany({
+    where: {
+      OR: [
+        {
+          nama: {
+            contains: q,
+            mode: "insensitive",
+          },
+        },
+        {
+          nomor: {
+            contains: q,
+          },
+        },
+        // {
+        //   id: {
+        //     contains: q,
+        //   },
+        // },
+      ],
+    },
+    include: {
+      Member: true,
+    },
+    take: 10,
+    // orderBy: {
+    //   createdAt: "desc", // pastikan field ada ya
+    // },
+  });
+};

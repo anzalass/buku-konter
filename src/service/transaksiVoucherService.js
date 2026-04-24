@@ -539,7 +539,7 @@ export const getHistoryTransaksi = async ({
         const keuntungan = s.keuntungan || 0;
 
         // 🔥 HITUNG HANYA YANG SELESAI
-        if (s.status === "Selesai") {
+        if (s.statusAmbil === "SudahDiambil" && s.statusServis === "Selesai") {
           totalPemasukan += keuntungan;
         }
 
@@ -550,7 +550,8 @@ export const getHistoryTransaksi = async ({
           nominal: keuntungan,
           kategori: "Service",
           ts: s.tanggal,
-          status: s.status, // 🔥 penting buat UI (badge)
+          status: s.statusServis,
+          statusAmbil: s.statusAmbil, // 🔥 penting buat UI (badge)
         };
       }),
 
@@ -613,6 +614,11 @@ export const getHistoryTransaksi = async ({
     filtered.forEach((item) => {
       if (item.type === "pengeluaran") {
         totalPengeluaranFiltered += item.nominal;
+      } else if (item.type === "service") {
+        // 🔥 FILTER SERVICE DI SINI JUGA
+        if (item.status === "Selesai" && item.statusAmbil === "SudahDiambil") {
+          totalPemasukanFiltered += item.nominal;
+        }
       } else {
         totalPemasukanFiltered += item.nominal;
       }
