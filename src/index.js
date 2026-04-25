@@ -23,7 +23,7 @@ app.use(
   cors({
     origin: `${process.env.SERVER_FE}`, // Sesuaikan dengan frontend kamu
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-admin-password"],
     credentials: true,
   })
 );

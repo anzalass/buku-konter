@@ -2,6 +2,8 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 import bcrypt from "bcrypt";
 import { uploadToCloudinary } from "../utils/ImageHandler.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 /* =========================
    HELPER TAMBAH WAKTU

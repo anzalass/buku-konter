@@ -102,3 +102,57 @@ export const hasRole =
       .status(403)
       .json({ message: "Access denied. Unauthorized role." });
   };
+
+// middleware/superAdminAuth.js
+export const superAdminAuth = (req, res, next) => {
+  const password = req.headers["x-admin-password"];
+
+  if (!password || password !== process.env.SUPER_ADMIN_PASSWORD) {
+    return res.status(403).json({ message: "Unauthorized PELER" });
+  }
+
+  next();
+};
+
+export const SuperAdminMiddleware = async (req, res, next) => {
+  try {
+    // 🔥 1. CEK TOKEN
+    const authHeader = req.headers["authorization"];
+
+    if (!authHeader) {
+      return res
+        .status(401)
+        .json({ message: "Authorization header is missing" });
+    }
+
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Format token salah" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET_KEY || "ASTRIYANAAAAAA"
+    );
+
+    // 🔥 2. CEK ROLE
+    if (decoded.role !== "Super Admin") {
+      return res.status(403).json({ message: "Bukan super admin" });
+    }
+
+    // 🔥 3. CEK PASSWORD TAMBAHAN (opsional security layer)
+    const password = req.headers["x-admin-password"];
+
+    if (!password || password !== process.env.SUPER_ADMIN_PASSWORD) {
+      return res.status(403).json({ message: "Admin password salah" });
+    }
+
+    // 🔥 inject user ke req
+    req.user = decoded;
+
+    next();
+  } catch (error) {
+    return res.status(403).json({ message: "Invalid or expired token" });
+  }
+};
