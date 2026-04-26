@@ -110,3 +110,35 @@ export const updateSub = async (req, res) => {
     res.status(400).json({ success: false, message: err.message });
   }
 };
+
+export const verifySuperAdmin = async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    // 🔥 VALIDATION (service logic inline)
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: "Password wajib diisi",
+      });
+    }
+
+    if (password !== process.env.SUPER_ADMIN_PASSWORD) {
+      return res.status(401).json({
+        success: false,
+        message: "Password salah",
+      });
+    }
+
+    // ✅ SUCCESS
+    return res.status(200).json({
+      success: true,
+      message: "Validasi berhasil",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Terjadi kesalahan server",
+    });
+  }
+};
