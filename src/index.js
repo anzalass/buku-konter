@@ -13,7 +13,7 @@ app.use(express.json());
 const port = process.env.PORT || 5000;
 
 app.get("/", (req, res) => {
-  res.send("BUKU KONTER");
+  res.send("BUKU KONTER 2");
 });
 app.use(cookieParser()); // ✅ WAJIB!
 
